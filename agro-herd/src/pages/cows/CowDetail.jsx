@@ -3,7 +3,7 @@ import { useParams, useNavigate } from 'react-router-dom';
 import { supabase } from '../../lib/supabase';
 import { useAuth } from '../../contexts/AuthContext';
 import { formatDate, formatCurrency, calculateAge } from '../../utils/helpers';
-import { Badge, PageLoader, ConfirmDialog } from '../../components/common';
+import { Badge, PageLoader, ConfirmDialog, Modal } from '../../components/common';
 import { toast } from 'react-toastify';
 import {
   ArrowLeft, Edit, Trash2, Milk, DollarSign, HeartPulse, Activity,
@@ -22,6 +22,11 @@ export default function CowDetail() {
   const [tabData, setTabData] = useState([]);
   const [tabLoading, setTabLoading] = useState(false);
   const [deleteOpen, setDeleteOpen] = useState(false);
+  
+  const [avgMilk, setAvgMilk] = useState(0);
+  const [periodModalOpen, setPeriodModalOpen] = useState(false);
+  const [periodDate, setPeriodDate] = useState('');
+  const [savingPeriod, setSavingPeriod] = useState(false);
 
   useEffect(() => {
     fetchCow();
@@ -33,6 +38,15 @@ export default function CowDetail() {
 
   const fetchCow = async () => {
     const { data } = await supabase.from('cows').select('*').eq('id', id).single();
+    
+    const { data: milkRecords } = await supabase.from('milk_records').select('quantity_liters').eq('cow_id', id);
+    if (milkRecords && milkRecords.length > 0) {
+      const total = milkRecords.reduce((sum, r) => sum + Number(r.quantity_liters), 0);
+      setAvgMilk((total / milkRecords.length).toFixed(1));
+    } else {
+      setAvgMilk(0);
+    }
+    
     setCow(data);
     setLoading(false);
   };
@@ -70,6 +84,37 @@ export default function CowDetail() {
     navigate('/cows');
   };
 
+  const handleSavePeriod = async () => {
+    if (!periodDate) return;
+    setSavingPeriod(true);
+    try {
+      await supabase.from('estrus_cycles').insert({
+        cow_id: id,
+        last_cycle_date: periodDate,
+        cycle_status: 'pending',
+        recorded_by: user?.id || null
+      });
+      const nextDate = new Date(periodDate);
+      nextDate.setDate(nextDate.getDate() + 21);
+      await supabase.from('notifications').insert({
+        cow_id: id,
+        type: 'estrus_alert',
+        title: `Cycle Alert for ${cow.tag_number}`,
+        message: `It has been 21 days since the last period. Please check for heat or update cycle status.`,
+        priority: 'high',
+        scheduled_for: nextDate.toISOString()
+      });
+      toast.success('Period date added and Smart Alert scheduled!');
+      setPeriodModalOpen(false);
+      setPeriodDate('');
+      if (activeTab === 'Cycle History') fetchTabData();
+    } catch (err) {
+      toast.error('Failed to add period date');
+    } finally {
+      setSavingPeriod(false);
+    }
+  };
+
   if (loading) return <PageLoader />;
   if (!cow) return <div className="text-center py-8">Cow not found</div>;
 
@@ -97,9 +142,20 @@ export default function CowDetail() {
               <span className="flex items-center gap-1.5"><Calendar size={14} /> {calculateAge(cow.date_of_birth)} old</span>
               {cow.weight_kg && <span className="flex items-center gap-1.5"><Weight size={14} /> {cow.weight_kg} kg</span>}
               {cow.color && <span>Color: {cow.color}</span>}
+              <span className="flex items-center gap-1.5 font-semibold text-brand-primary ml-2 bg-brand-primary/10 px-2 py-0.5 rounded-md"><Milk size={14} /> Avg Milk: {avgMilk} L/day</span>
             </div>
           </div>
-          <div className="flex gap-2">
+          <div className="flex flex-wrap gap-2 justify-end">
+            {canEdit() && (
+              <button onClick={() => setPeriodModalOpen(true)} className="btn-primary text-sm flex items-center gap-1.5 shadow-md">
+                <Calendar size={14} /> Update Period
+              </button>
+            )}
+            {canEdit() && (
+              <button onClick={() => navigate(`/expenses?add=true&cow_id=${id}`)} className="btn-warning text-white text-sm flex items-center gap-1.5 shadow-md">
+                <DollarSign size={14} /> Add Expense
+              </button>
+            )}
             {canEdit() && (
               <button onClick={() => navigate(`/cows/${id}/edit`)} className="btn-secondary text-sm flex items-center gap-1.5">
                 <Edit size={14} /> Edit
@@ -299,6 +355,23 @@ export default function CowDetail() {
         title="Delete Cow"
         message={`Are you sure you want to delete ${cow.name || cow.tag_number}? This will also remove all associated records.`}
       />
+
+      <Modal isOpen={periodModalOpen} onClose={() => setPeriodModalOpen(false)} title="Update Period Date">
+        <div className="space-y-4">
+          <div>
+            <label className="label">Last Period Date</label>
+            <input type="date" value={periodDate} onChange={(e) => setPeriodDate(e.target.value)} className="input-field" max={new Date().toISOString().split('T')[0]} />
+            <p className="text-xs text-farm-text-secondary mt-1">A Smart Alert will automatically trigger 21 days after this date.</p>
+          </div>
+          <div className="flex justify-end gap-3 pt-2">
+            <button onClick={() => setPeriodModalOpen(false)} className="btn-secondary">Cancel</button>
+            <button onClick={handleSavePeriod} disabled={savingPeriod || !periodDate} className="btn-primary flex items-center gap-2">
+              {savingPeriod && <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />}
+              Save Period Date
+            </button>
+          </div>
+        </div>
+      </Modal>
     </div>
   );
 }

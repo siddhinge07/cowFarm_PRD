@@ -6,10 +6,11 @@ import { formatDate, formatCurrency, downloadCSV, getDateRange } from '../../uti
 import { Badge, Pagination, EmptyState, PageLoader, Modal } from '../../components/common';
 import { toast } from 'react-toastify';
 import { Plus, Download, Milk, Calendar, ClipboardList } from 'lucide-react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 
 export default function MilkList() {
   const navigate = useNavigate();
+  const [searchParams, setSearchParams] = useSearchParams();
   const { canEdit, user } = useAuth();
   const [records, setRecords] = useState([]);
   const [cows, setCows] = useState([]);
@@ -36,6 +37,13 @@ export default function MilkList() {
   useEffect(() => {
     fetchRecords();
   }, [page, filters]);
+
+  useEffect(() => {
+    if (searchParams.get('add') === 'true') {
+      setModalOpen(true);
+      setSearchParams({}, { replace: true });
+    }
+  }, [searchParams, setSearchParams]);
 
   const fetchRecords = async () => {
     setLoading(true);

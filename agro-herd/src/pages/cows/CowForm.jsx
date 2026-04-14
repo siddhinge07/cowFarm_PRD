@@ -11,19 +11,20 @@ import { Save, ArrowLeft } from 'lucide-react';
 import { PageLoader } from '../../components/common';
 
 const schema = yup.object({
-  tag_number: yup.string().required('Tag number is required'),
-  breed: yup.string().required('Breed is required'),
-  date_of_birth: yup.string().required('Date of birth is required'),
+  tag_number: yup.string().required('Cow ID is required'),
+  breed: yup.string().nullable(),
+  date_of_birth: yup.string().nullable(),
   name: yup.string().max(100),
   weight_kg: yup.number().nullable().transform((v, o) => o === '' ? null : v).min(0).max(2000),
   color: yup.string().max(50),
-  health_status: yup.string().required(),
+  health_status: yup.string().nullable(),
   is_milking: yup.boolean(),
   purchase_price: yup.number().nullable().transform((v, o) => o === '' ? null : v).min(0),
+  last_period_date: yup.string().nullable(),
   notes: yup.string().max(1000),
 });
 
-export default function CowForm() {
+export default function CowForm({ onSuccess, hideBackBtn }) {
   const { id } = useParams();
   const navigate = useNavigate();
   const { user } = useAuth();
@@ -36,7 +37,7 @@ export default function CowForm() {
     defaultValues: {
       tag_number: '', name: '', breed: '', date_of_birth: '', weight_kg: '',
       color: '', health_status: 'healthy', is_milking: true, purchase_date: '',
-      purchase_price: '', notes: '',
+      purchase_price: '', last_period_date: '', notes: '',
     },
   });
 
@@ -59,10 +60,17 @@ export default function CowForm() {
     setSaving(true);
     try {
       const payload = {
-        ...values,
+        tag_number: values.tag_number,
+        name: values.name,
+        breed: values.breed || 'Unknown',
+        date_of_birth: values.date_of_birth || null,
         weight_kg: values.weight_kg || null,
-        purchase_price: values.purchase_price || null,
+        color: values.color,
+        health_status: values.health_status,
+        is_milking: values.is_milking,
         purchase_date: values.purchase_date || null,
+        purchase_price: values.purchase_price || null,
+        notes: values.notes,
         added_by: user?.id,
       };
 
@@ -71,11 +79,39 @@ export default function CowForm() {
         if (error) throw error;
         toast.success('Cow updated successfully');
       } else {
-        const { error } = await supabase.from('cows').insert(payload);
+        const { data: newCow, error } = await supabase.from('cows').insert(payload).select().single();
         if (error) throw error;
+        
+        // Handle automated period tracking if provided
+        if (values.last_period_date) {
+          const cowId = newCow.id;
+          
+          // Insert cycle record
+          await supabase.from('estrus_cycles').insert({
+            cow_id: cowId,
+            last_cycle_date: values.last_period_date,
+            cycle_status: 'pending',
+            recorded_by: user?.id
+          });
+
+          // Schedule 21-day alert
+          const nextDate = new Date(values.last_period_date);
+          nextDate.setDate(nextDate.getDate() + 21);
+          
+          await supabase.from('notifications').insert({
+            cow_id: cowId,
+            type: 'estrus_alert',
+            title: `Cycle Alert for ${values.tag_number}`,
+            message: `It has been 21 days since the last period. Please check for heat or update cycle status.`,
+            priority: 'high',
+            scheduled_for: nextDate.toISOString()
+          });
+        }
+        
         toast.success('Cow added successfully');
       }
-      navigate('/cows');
+      if (onSuccess) onSuccess();
+      else navigate('/cows');
     } catch (err) {
       toast.error(err.message || 'Failed to save');
     } finally {
@@ -87,9 +123,11 @@ export default function CowForm() {
 
   return (
     <div className="max-w-2xl mx-auto">
-      <button onClick={() => navigate('/cows')} className="btn-ghost text-sm mb-4 flex items-center gap-1.5 -ml-2">
-        <ArrowLeft size={16} /> Back to Cows
-      </button>
+      {!hideBackBtn && (
+        <button onClick={() => navigate('/cows')} className="btn-ghost text-sm mb-4 flex items-center gap-1.5 -ml-2">
+          <ArrowLeft size={16} /> Back to Cows
+        </button>
+      )}
 
       <div className="card p-6 md:p-8">
         <h2 className="section-title mb-6">{isEdit ? 'Edit Cow' : 'Add New Cow'}</h2>
@@ -97,29 +135,27 @@ export default function CowForm() {
         <form onSubmit={handleSubmit(onSubmit)} className="space-y-5">
           <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
             <div>
-              <label className="label">Tag Number *</label>
-              <input {...register('tag_number')} className="input-field" placeholder="e.g., T001" />
+              <label className="label">Cow ID *</label>
+              <input {...register('tag_number')} className="input-field" placeholder="e.g., 012 or COW12" />
               {errors.tag_number && <p className="text-xs text-danger mt-1">{errors.tag_number.message}</p>}
             </div>
             <div>
-              <label className="label">Name</label>
+              <label className="label">Name (Optional)</label>
               <input {...register('name')} className="input-field" placeholder="e.g., Lakshmi" />
             </div>
           </div>
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
             <div>
-              <label className="label">Breed *</label>
+              <label className="label">Breed (Optional)</label>
               <select {...register('breed')} className="select-field">
                 <option value="">Select breed</option>
                 {BREEDS.map(b => <option key={b} value={b}>{b}</option>)}
               </select>
-              {errors.breed && <p className="text-xs text-danger mt-1">{errors.breed.message}</p>}
             </div>
             <div>
-              <label className="label">Date of Birth *</label>
+              <label className="label">Date of Birth (Optional)</label>
               <input type="date" {...register('date_of_birth')} className="input-field" max={new Date().toISOString().split('T')[0]} />
-              {errors.date_of_birth && <p className="text-xs text-danger mt-1">{errors.date_of_birth.message}</p>}
             </div>
           </div>
 
@@ -133,7 +169,7 @@ export default function CowForm() {
               <input {...register('color')} className="input-field" placeholder="e.g., Black & White" />
             </div>
             <div>
-              <label className="label">Health Status *</label>
+              <label className="label">Health Status</label>
               <select {...register('health_status')} className="select-field">
                 {HEALTH_STATUSES.map(s => <option key={s.value} value={s.value}>{s.label}</option>)}
               </select>
@@ -144,6 +180,17 @@ export default function CowForm() {
             <input type="checkbox" id="is_milking" {...register('is_milking')} className="w-4 h-4 rounded border-farm-border text-brand-primary focus:ring-brand-primary" />
             <label htmlFor="is_milking" className="text-sm font-medium text-farm-text-primary">Currently milking</label>
           </div>
+
+          {!isEdit && (
+            <div className="bg-brand-primary/5 p-4 rounded-xl border border-brand-primary/20">
+              <h3 className="font-semibold text-brand-primary mb-3">Reproduction Tracking</h3>
+              <div className="md:w-1/2">
+                <label className="label">Last Period Date</label>
+                <input type="date" {...register('last_period_date')} className="input-field" max={new Date().toISOString().split('T')[0]} />
+                <p className="text-xs text-farm-text-secondary mt-1">If entered, a Smart Alert will be scheduled 21 days from this date.</p>
+              </div>
+            </div>
+          )}
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
             <div>
@@ -162,7 +209,9 @@ export default function CowForm() {
           </div>
 
           <div className="flex justify-end gap-3 pt-4 border-t border-farm-border">
-            <button type="button" onClick={() => navigate('/cows')} className="btn-secondary">Cancel</button>
+            {!hideBackBtn && (
+              <button type="button" onClick={() => navigate('/cows')} className="btn-secondary">Cancel</button>
+            )}
             <button type="submit" disabled={saving} className="btn-primary flex items-center gap-2">
               {saving ? <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" /> : <Save size={16} />}
               {isEdit ? 'Update Cow' : 'Add Cow'}

@@ -61,6 +61,10 @@ export const PRIORITY_LEVELS = [
 
 export const CYCLE_STATUSES = [
   { value: 'pending', label: 'Pending' },
+  { value: 'failed', label: 'Failed' },
+  { value: 'pregnancy_attempt', label: 'Pregnancy Attempt' },
+  { value: 'given_medicine', label: 'Given Medicine' },
+  { value: 'pregnant', label: 'Pregnant' },
   { value: 'observed', label: 'Observed' },
   { value: 'missed', label: 'Missed' },
   { value: 'confirmed_pregnancy', label: 'Confirmed Pregnancy' },

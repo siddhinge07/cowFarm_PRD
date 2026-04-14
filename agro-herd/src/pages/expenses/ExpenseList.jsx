@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { supabase } from '../../lib/supabase';
 import { useAuth } from '../../contexts/AuthContext';
 import { EXPENSE_CATEGORIES } from '../../constants';
@@ -9,6 +9,7 @@ import { toast } from 'react-toastify';
 import { Plus, Search, Download, DollarSign, Trash2 } from 'lucide-react';
 
 export default function ExpenseList() {
+  const [searchParams, setSearchParams] = useSearchParams();
   const { canEdit, isAdmin, user } = useAuth();
   const [expenses, setExpenses] = useState([]);
   const [cows, setCows] = useState([]);
@@ -31,6 +32,17 @@ export default function ExpenseList() {
   useEffect(() => {
     fetchExpenses();
   }, [page, filters]);
+
+  useEffect(() => {
+    if (searchParams.get('add') === 'true') {
+      const routeCowId = searchParams.get('cow_id');
+      if (routeCowId) {
+        setForm(f => ({ ...f, cow_id: routeCowId }));
+      }
+      setModalOpen(true);
+      setSearchParams({}, { replace: true });
+    }
+  }, [searchParams, setSearchParams]);
 
   const fetchExpenses = async () => {
     setLoading(true);

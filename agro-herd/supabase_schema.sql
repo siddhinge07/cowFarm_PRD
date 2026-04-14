@@ -54,7 +54,7 @@ CREATE TABLE IF NOT EXISTS estrus_cycles (
   id                  UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
   cow_id              UUID NOT NULL REFERENCES cows(id) ON DELETE CASCADE,
   last_cycle_date     DATE NOT NULL,
-  cycle_status        VARCHAR(30) DEFAULT 'pending' CHECK (cycle_status IN ('pending', 'observed', 'missed', 'confirmed_pregnancy')),
+  cycle_status        VARCHAR(30) DEFAULT 'pending' CHECK (cycle_status IN ('pending', 'observed', 'missed', 'confirmed_pregnancy', 'failed', 'pregnancy_attempt', 'given_medicine', 'pregnant')),
   notes               TEXT,
   recorded_by         UUID REFERENCES users(id) ON DELETE SET NULL,
   created_at          TIMESTAMPTZ DEFAULT NOW()
