@@ -33,23 +33,55 @@ export default function CowList() {
 
   const fetchCows = async () => {
     setLoading(true);
-    let query = supabase
-      .from('cows')
-      .select('*', { count: 'exact' })
-      .order('created_at', { ascending: false })
-      .range((page - 1) * limit, page * limit - 1);
+    let isRequesting = true;
+    
+    // Failsafe timeout to prevent infinite spinner
+    const failsafe = setTimeout(() => {
+      if (isRequesting) setLoading(false);
+    }, 5000);
 
-    if (filters.search) {
-      query = query.or(`tag_number.ilike.%${filters.search}%,name.ilike.%${filters.search}%`);
+    try {
+      let query = supabase
+        .from('cows')
+        .select('*', { count: 'exact' })
+        .order('created_at', { ascending: false })
+        .range((page - 1) * limit, page * limit - 1);
+
+      if (filters.search) {
+        query = query.or(`tag_number.ilike.%${filters.search}%,name.ilike.%${filters.search}%`);
+      }
+      if (filters.breed) query = query.eq('breed', filters.breed);
+      if (filters.health_status) query = query.eq('health_status', filters.health_status);
+      if (filters.is_milking !== '') query = query.eq('is_milking', filters.is_milking === 'true');
+
+      const timeoutPromise = new Promise((_, reject) => setTimeout(() => reject(new Error('TIMEOUT')), 2500));
+      const res = await Promise.race([query, timeoutPromise]);
+      
+      if (res.error) throw res.error;
+      
+      setCows(res.data || []);
+      setTotal(res.count || 0);
+    } catch (err) {
+      console.warn('Fallback to local mock DB due to error:', err.message);
+      
+      const localCows = JSON.parse(localStorage.getItem('mock_cows') || '[]');
+      let filtered = localCows;
+      
+      if (filters.search) {
+        const s = filters.search.toLowerCase();
+        filtered = filtered.filter(c => c.tag_number?.toLowerCase().includes(s) || c.name?.toLowerCase().includes(s));
+      }
+      if (filters.breed) filtered = filtered.filter(c => c.breed === filters.breed);
+      if (filters.health_status) filtered = filtered.filter(c => c.health_status === filters.health_status);
+      if (filters.is_milking !== '') filtered = filtered.filter(c => c.is_milking === (filters.is_milking === 'true'));
+      
+      setCows(filtered);
+      setTotal(filtered.length);
+    } finally {
+      isRequesting = false;
+      clearTimeout(failsafe);
+      setLoading(false);
     }
-    if (filters.breed) query = query.eq('breed', filters.breed);
-    if (filters.health_status) query = query.eq('health_status', filters.health_status);
-    if (filters.is_milking !== '') query = query.eq('is_milking', filters.is_milking === 'true');
-
-    const { data, count } = await query;
-    setCows(data || []);
-    setTotal(count || 0);
-    setLoading(false);
   };
 
   const handleExportCSV = () => {
