@@ -153,3 +153,42 @@
   font-family: 'Plus Jakarta Sans', sans-serif !important;
   box-shadow: 0 4px 16px rgba(0,0,0,0.08) !important;
 }
+
+/* Custom Date Input for dd/mm/yyyy display */
+.date-input {
+  position: relative;
+  /* Hide native browser date text (make it transparent) */
+  color: transparent !important;
+}
+
+/* Custom overlay using data-date attribute */
+.date-input::before {
+  content: attr(data-date);
+  position: absolute;
+  left: 1rem;
+  top: 50%;
+  transform: translateY(-50%);
+  font-family: inherit;
+  font-size: 0.875rem; /* text-sm */
+  pointer-events: none;
+}
+
+/* Color for filled values (e.g. 26/05/2026) */
+.date-input.date-input-filled::before {
+  color: #1C2321 !important; /* farm-text-primary */
+}
+
+/* Color for empty placeholders (dd/mm/yyyy) */
+.date-input.date-input-empty::before {
+  color: rgba(28, 35, 33, 0.4) !important; /* placeholder-farm-text-secondary/60 */
+}
+
+/* When focused, restore native text visibility and hide the custom overlay */
+.date-input:focus {
+  color: #1C2321 !important;
+}
+
+.date-input:focus::before {
+  display: none !important;
+  content: "" !important;
+}

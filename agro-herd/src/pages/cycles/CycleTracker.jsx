@@ -1,47 +1,57 @@
 import { useState, useEffect } from 'react';
-import { supabase } from '../../lib/supabase';
+import { useNavigate } from 'react-router-dom';
+import { api } from '../../lib/api';
 import { useAuth } from '../../contexts/AuthContext';
 import { CYCLE_STATUSES } from '../../constants';
 import { formatDate } from '../../utils/helpers';
-import { Badge, Modal, EmptyState, PageLoader } from '../../components/common';
+import { Badge, Modal, EmptyState, PageLoader, DateInput, ConfirmDialog } from '../../components/common';
 import { toast } from 'react-toastify';
-import { Plus, Activity, AlertCircle } from 'lucide-react';
+import { Plus, Activity, AlertCircle, ArrowLeft, Trash } from 'lucide-react';
+
+const ACTIONED_STATUSES = ['observed', 'pregnancy_attempt', 'given_medicine', 'failed', 'missed'];
+const PREGNANT_STATUSES = ['pregnant', 'confirmed_pregnancy'];
 
 export default function CycleTracker() {
+  const navigate = useNavigate();
   const { canEdit, user } = useAuth();
   const [cycles, setCycles] = useState([]);
   const [cows, setCows] = useState([]);
   const [loading, setLoading] = useState(true);
   const [modalOpen, setModalOpen] = useState(false);
-  const [form, setForm] = useState({ cow_id: '', last_cycle_date: '', cycle_status: 'pending', notes: '' });
+  const [form, setForm] = useState({ cow_id: '', last_cycle_date: '', cycle_status: 'pending', notes: '', pregnancy_date: '' });
   const [saving, setSaving] = useState(false);
-  const [filter, setFilter] = useState('all'); // all, upcoming, today
+  const [filter, setFilter] = useState('upcoming');
+  const [confirmOpen, setConfirmOpen] = useState(false);
+  const [selectedId, setSelectedId] = useState(null);
 
   useEffect(() => {
     fetchData();
   }, []);
 
   const fetchData = async () => {
-    const [cyclesRes, cowsRes] = await Promise.all([
-      supabase.from('estrus_cycles').select('*, cows(tag_number, name)').order('last_cycle_date', { ascending: false }),
-      supabase.from('cows').select('id, tag_number, name').order('tag_number'),
-    ]);
-    setCycles(cyclesRes.data || []);
-    setCows(cowsRes.data || []);
-    setLoading(false);
+    try {
+      const [cyclesRes, cowsRes] = await Promise.all([
+        api.get('/cycles'),
+        api.get('/cows')
+      ]);
+      setCycles(cyclesRes.data || []);
+      setCows(cowsRes.data || []);
+    } catch (err) {
+      toast.error('Failed to fetch data');
+    } finally {
+      setLoading(false);
+    }
   };
 
   const getNextCycleDate = (lastDate, status) => {
+    if (PREGNANT_STATUSES.includes(status)) return null;
     const d = new Date(lastDate);
-    if (status === 'pregnant' || status === 'confirmed_pregnancy') {
-      d.setMonth(d.getMonth() + 9);
-    } else {
-      d.setDate(d.getDate() + 21);
-    }
+    d.setDate(d.getDate() + 21);
     return d;
   };
 
   const getDaysUntil = (nextDate) => {
+    if (!nextDate) return null;
     const today = new Date();
     today.setHours(0, 0, 0, 0);
     const next = new Date(nextDate);
@@ -50,66 +60,95 @@ export default function CycleTracker() {
   };
 
   const getAlertTier = (daysUntil) => {
+    if (daysUntil === null) return null;
     if (daysUntil <= 0) return { tier: 'CRITICAL', color: 'danger', emoji: '🔴' };
     if (daysUntil <= 2) return { tier: 'HIGH', color: 'warning', emoji: '🟠' };
     if (daysUntil <= 5) return { tier: 'MEDIUM', color: 'info', emoji: '🟡' };
     return { tier: 'INFO', color: 'success', emoji: '🟢' };
   };
 
-  const filtered = cycles.filter(c => {
-    if (filter === 'all') return true;
-    const next = getNextCycleDate(c.last_cycle_date, c.cycle_status);
-    const days = getDaysUntil(next);
-    if (filter === 'today') return days === 0;
-    if (filter === 'upcoming') return days >= 0 && days <= 5;
-    return true;
+  const isActioned = (status) => ACTIONED_STATUSES.includes(status);
+  const isPregnant = (status) => PREGNANT_STATUSES.includes(status);
+
+  const latestCyclesMap = {};
+  cycles.forEach(c => {
+    const existing = latestCyclesMap[c.cow_id];
+    if (!existing || new Date(c.created_at || c.last_cycle_date) > new Date(existing.created_at || existing.last_cycle_date)) {
+      latestCyclesMap[c.cow_id] = c;
+    }
   });
+  const latestCycles = Object.values(latestCyclesMap);
+
+  const filtered = (filter === 'all' ? cycles : latestCycles)
+    .filter(c => {
+      if (filter === 'all') return true;
+      if (isPregnant(c.cycle_status)) return false;
+      const next = getNextCycleDate(c.last_cycle_date, c.cycle_status);
+      const days = getDaysUntil(next);
+      if (days === null) return false;
+      
+      if (filter === 'today') return days === 0;
+      if (filter === 'upcoming') return days >= 0;
+      return true;
+    })
+    .sort((a, b) => {
+      if (filter === 'all') {
+        const dateA = new Date(a.created_at || a.last_cycle_date);
+        const dateB = new Date(b.created_at || b.last_cycle_date);
+        return dateB - dateA;
+      }
+      const nextA = getNextCycleDate(a.last_cycle_date, a.cycle_status);
+      const nextB = getNextCycleDate(b.last_cycle_date, b.cycle_status);
+      if (!nextA && !nextB) return 0;
+      if (!nextA) return 1;
+      if (!nextB) return -1;
+      return nextA - nextB;
+    });
 
   const handleSave = async () => {
     if (!form.cow_id || !form.last_cycle_date) {
       toast.error('Please select a cow and date');
       return;
     }
+    if (isPregnant(form.cycle_status) && !form.pregnancy_date) {
+      toast.error('Please select pregnancy date');
+      return;
+    }
     setSaving(true);
     try {
-      const { error } = await supabase.from('estrus_cycles').insert({
+      await api.post('/cycles', {
         cow_id: form.cow_id,
         last_cycle_date: form.last_cycle_date,
         cycle_status: form.cycle_status,
         notes: form.notes || null,
-        recorded_by: user?.id,
       });
-      if (error) throw error;
-      
-      const cowData = cows.find(c => c.id === form.cow_id);
-      const nextDate = getNextCycleDate(form.last_cycle_date, form.cycle_status);
-      
-      let alertMessage = '';
-      if (form.cycle_status === 'pregnant' || form.cycle_status === 'confirmed_pregnancy') {
-        alertMessage = `Cow ${cowData?.tag_number || ''} is pregnant! Expected calving in 9 months.`;
-        // Also update the cow's health status to pregnant!
-        await supabase.from('cows').update({ health_status: 'pregnant' }).eq('id', form.cow_id);
-      } else {
-        alertMessage = `It has been 21 days since the last action (${form.cycle_status.replace('_', ' ')}) for Cow ${cowData?.tag_number || ''}. Please check for heat.`;
+
+      // If pregnant, update cow status and pregnancy date
+      if (isPregnant(form.cycle_status)) {
+        await api.put(`/cows/${form.cow_id}`, {
+          health_status: 'pregnant',
+          pregnancy_date: form.pregnancy_date,
+        }).catch(console.error);
       }
 
-      await supabase.from('notifications').insert({
-        cow_id: form.cow_id,
-        type: 'estrus_alert',
-        title: `Smart Alert for ${cowData?.tag_number || 'Cow'}`,
-        message: alertMessage,
-        priority: (form.cycle_status === 'pregnant' || form.cycle_status === 'confirmed_pregnancy') ? 'medium' : 'high',
-        scheduled_for: nextDate.toISOString()
-      });
-
-      toast.success('Smart Alert schedule updated successfully!');
+      toast.success('Cycle record saved successfully!');
       setModalOpen(false);
-      setForm({ cow_id: '', last_cycle_date: '', cycle_status: 'pending', notes: '' });
+      setForm({ cow_id: '', last_cycle_date: '', cycle_status: 'pending', notes: '', pregnancy_date: '' });
       fetchData();
     } catch (err) {
-      toast.error(err.message);
+      toast.error(err.message || 'Failed to save cycle');
     } finally {
       setSaving(false);
+    }
+  };
+
+  const handleDelete = async (id) => {
+    try {
+      await api.delete(`/cycles/${id}`);
+      toast.success('Cycle record deleted');
+      fetchData();
+    } catch (err) {
+      toast.error(err.message || 'Failed to delete cycle');
     }
   };
 
@@ -117,6 +156,9 @@ export default function CycleTracker() {
 
   return (
     <div className="space-y-4">
+      <button onClick={() => navigate('/')} className="btn-ghost text-sm flex items-center gap-1.5 -ml-2 mb-2">
+        <ArrowLeft size={16} /> Back to Dashboard
+      </button>
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div className="flex items-center gap-2">
           {['all', 'upcoming', 'today'].map(f => (
@@ -127,7 +169,7 @@ export default function CycleTracker() {
                 filter === f ? 'bg-brand-primary text-white' : 'bg-white border border-farm-border text-farm-text-secondary hover:bg-gray-50'
               }`}
             >
-              {f === 'upcoming' ? '⏰ Upcoming (5 days)' : f === 'today' ? '🔴 Due Today' : 'All Records'}
+              {f === 'upcoming' ? '⏰ Upcoming' : f === 'today' ? '🔴 Due Today' : 'All Records'}
             </button>
           ))}
         </div>
@@ -145,38 +187,57 @@ export default function CycleTracker() {
           <table className="w-full">
             <thead><tr className="table-header">
               <th className="px-4 py-3 text-left">Cow</th>
-              <th className="px-4 py-3 text-left">Last Cycle</th>
-              <th className="px-4 py-3 text-left">Next Expected</th>
+              <th className="px-4 py-3 text-left">Last Cycle Date</th>
+              <th className="px-4 py-3 text-left">Last Action</th>
+              <th className="px-4 py-3 text-left">Upcoming Date</th>
               <th className="px-4 py-3 text-left">Alert</th>
-              <th className="px-4 py-3 text-left">Status</th>
               <th className="px-4 py-3 text-left hidden md:table-cell">Notes</th>
+              <th className="px-4 py-3 text-center">Actions</th>
             </tr></thead>
             <tbody>
               {filtered.map(c => {
+                const pregnant = isPregnant(c.cycle_status);
+                const actioned = isActioned(c.cycle_status);
                 const nextDate = getNextCycleDate(c.last_cycle_date, c.cycle_status);
                 const days = getDaysUntil(nextDate);
                 const alert = getAlertTier(days);
                 return (
                   <tr key={c.id} className="table-row cursor-default">
                     <td className="px-4 py-3">
-                      <span className="font-mono font-semibold text-brand-primary text-sm">{c.cows?.tag_number}</span>
-                      {c.cows?.name && <span className="text-sm text-farm-text-secondary ml-2">{c.cows.name}</span>}
+                      <span className="font-mono font-semibold text-brand-primary text-sm">{c.tag_number || c.cow_id}</span>
+                      {c.name && <span className="text-sm text-farm-text-secondary ml-2">{c.name}</span>}
                     </td>
                     <td className="px-4 py-3 text-sm">{formatDate(c.last_cycle_date)}</td>
-                    <td className="px-4 py-3 text-sm">{formatDate(nextDate)}</td>
-                    <td className="px-4 py-3">
-                      <span className="text-sm">
-                        {alert.emoji} <span className="font-medium">{days <= 0 ? 'Today / Overdue' : `${days} day${days !== 1 ? 's' : ''}`}</span>
-                      </span>
-                    </td>
                     <td className="px-4 py-3">
                       <Badge variant={
-                        (c.cycle_status === 'confirmed_pregnancy' || c.cycle_status === 'pregnant') ? 'pregnant' :
-                        (c.cycle_status === 'observed' || c.cycle_status === 'pregnancy_attempt' || c.cycle_status === 'given_medicine') ? 'success' :
+                        pregnant ? 'pregnant' :
+                        actioned ? 'success' :
                         (c.cycle_status === 'missed' || c.cycle_status === 'failed') ? 'danger' : 'warning'
-                      }>{c.cycle_status?.replace('_', ' ')}</Badge>
+                      }>{c.cycle_status?.replaceAll('_', ' ')}</Badge>
+                    </td>
+                    <td className="px-4 py-3 text-sm">
+                      {pregnant ? '—' : formatDate(nextDate)}
+                    </td>
+                    <td className="px-4 py-3">
+                      {pregnant ? (
+                        <span className="text-sm font-medium text-purple-600">🤰 Pregnant</span>
+                      ) : (filter !== 'all' || !actioned) && alert ? (
+                        <span className="text-sm">
+                          {alert.emoji} <span className="font-medium">{days <= 0 ? 'Today / Overdue' : `${days} day${days !== 1 ? 's' : ''}`}</span>
+                        </span>
+                      ) : actioned ? (
+                        <span className="text-sm font-medium text-green-600">✅ Updated</span>
+                      ) : '—'}
                     </td>
                     <td className="px-4 py-3 text-sm text-farm-text-secondary hidden md:table-cell">{c.notes || '—'}</td>
+                    <td className="px-4 py-3 text-center">
+                      <button
+                        onClick={() => { setSelectedId(c.id); setConfirmOpen(true); }}
+                        className="text-red-500 hover:text-red-700 p-1 rounded hover:bg-red-50 transition-colors"
+                      >
+                        <Trash size={16} />
+                      </button>
+                    </td>
                   </tr>
                 );
               })}
@@ -185,7 +246,15 @@ export default function CycleTracker() {
         </div>
       )}
 
-      <Modal isOpen={modalOpen} onClose={() => setModalOpen(false)} title="Record Action / Update Status">
+      <ConfirmDialog
+        isOpen={confirmOpen}
+        onClose={() => setConfirmOpen(false)}
+        onConfirm={() => { handleDelete(selectedId); setConfirmOpen(false); }}
+        title="Delete Cycle Record"
+        message="Are you sure you want to delete this cycle record? This action cannot be undone."
+      />
+
+      <Modal isOpen={modalOpen} onClose={() => setModalOpen(false)} title="Record Cycle Action">
         <div className="space-y-4">
           <div>
             <label className="label">Cow *</label>
@@ -196,7 +265,7 @@ export default function CycleTracker() {
           </div>
           <div>
             <label className="label">Date of Action *</label>
-            <input type="date" value={form.last_cycle_date} onChange={e => setForm(f => ({ ...f, last_cycle_date: e.target.value }))} className="input-field" />
+            <DateInput value={form.last_cycle_date} onChange={e => setForm(f => ({ ...f, last_cycle_date: e.target.value }))} className="input-field" />
           </div>
           <div>
             <label className="label">Action Taken / Status</label>
@@ -204,6 +273,17 @@ export default function CycleTracker() {
               {CYCLE_STATUSES.map(s => <option key={s.value} value={s.value}>{s.label}</option>)}
             </select>
           </div>
+          {isPregnant(form.cycle_status) && (
+            <div>
+              <label className="label">Pregnancy Date *</label>
+              <DateInput
+                value={form.pregnancy_date}
+                onChange={e => setForm(f => ({ ...f, pregnancy_date: e.target.value }))}
+                className="input-field"
+              />
+              <p className="text-xs text-farm-text-secondary mt-1">This date will be saved to the cow's profile as the pregnancy date.</p>
+            </div>
+          )}
           <div>
             <label className="label">Notes</label>
             <textarea value={form.notes} onChange={e => setForm(f => ({ ...f, notes: e.target.value }))} className="input-field min-h-[80px]" />

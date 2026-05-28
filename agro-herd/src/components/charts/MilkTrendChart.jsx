@@ -1,47 +1,100 @@
 import { useState, useEffect } from 'react';
 import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
-import { supabase } from '../../lib/supabase';
+import { api } from '../../lib/api';
 import { Spinner } from '../common';
 
-export default function MilkTrendChart() {
+export default function MilkTrendChart({ from, to }) {
   const [data, setData] = useState([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     fetchData();
-  }, []);
+  }, [from, to]);
 
   const fetchData = async () => {
-    const end = new Date();
-    const start = new Date();
-    start.setDate(start.getDate() - 30);
+    setLoading(true);
+    const startStr = from || new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
+    const endStr = to || new Date().toISOString().split('T')[0];
 
-    const { data: records } = await supabase
-      .from('milk_records')
-      .select('record_date, quantity_liters')
-      .gte('record_date', start.toISOString().split('T')[0])
-      .lte('record_date', end.toISOString().split('T')[0])
-      .order('record_date');
+    try {
+      const { data: records } = await api.get('/milk', {
+        from: startStr,
+        to: endStr,
+        limit: 1000
+      });
 
-    // Group by date
-    const grouped = {};
-    for (let d = new Date(start); d <= end; d.setDate(d.getDate() + 1)) {
-      const key = d.toISOString().split('T')[0];
-      grouped[key] = 0;
-    }
-    (records || []).forEach(r => {
-      if (grouped[r.record_date] !== undefined) {
-        grouped[r.record_date] += Number(r.quantity_liters);
+      const [sYear, sMonth, sDay] = startStr.split('-').map(Number);
+      const [eYear, eMonth, eDay] = endStr.split('-').map(Number);
+      const startDate = new Date(sYear, sMonth - 1, sDay);
+      const endDate = new Date(eYear, eMonth - 1, eDay);
+
+      const timeDiff = endDate - startDate;
+      const daysDiff = timeDiff / (1000 * 60 * 60 * 24);
+      const isWideRange = daysDiff > 90;
+
+      const grouped = {};
+
+      if (isWideRange) {
+        // Group by month
+        let d = new Date(startDate.getFullYear(), startDate.getMonth(), 1);
+        while (d <= endDate) {
+          const year = d.getFullYear();
+          const month = String(d.getMonth() + 1).padStart(2, '0');
+          const key = `${year}-${month}`;
+          grouped[key] = 0;
+          d.setMonth(d.getMonth() + 1);
+        }
+
+        (records || []).forEach(r => {
+          const [yr, mo] = r.record_date.split('-');
+          const key = `${yr}-${mo}`;
+          if (grouped[key] !== undefined) {
+            grouped[key] += Number(r.quantity_liters);
+          }
+        });
+
+        setData(
+          Object.entries(grouped).map(([monthStr, liters]) => {
+            const [yr, mo] = monthStr.split('-');
+            const monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+            const monthLabel = monthNames[parseInt(mo, 10) - 1];
+            return {
+              date: `${monthLabel} '${yr.slice(-2)}`,
+              liters: Math.round(liters * 100) / 100,
+            };
+          })
+        );
+      } else {
+        // Group by day
+        for (let d = new Date(startDate); d <= endDate; d.setDate(d.getDate() + 1)) {
+          const year = d.getFullYear();
+          const month = String(d.getMonth() + 1).padStart(2, '0');
+          const day = String(d.getDate()).padStart(2, '0');
+          const key = `${year}-${month}-${day}`;
+          grouped[key] = 0;
+        }
+
+        (records || []).forEach(r => {
+          if (grouped[r.record_date] !== undefined) {
+            grouped[r.record_date] += Number(r.quantity_liters);
+          }
+        });
+
+        setData(
+          Object.entries(grouped).map(([dateStr, liters]) => {
+            const [yr, mo, dy] = dateStr.split('-');
+            return {
+              date: `${dy}/${mo}`,
+              liters: Math.round(liters * 100) / 100,
+            };
+          })
+        );
       }
-    });
-
-    setData(
-      Object.entries(grouped).map(([date, liters]) => ({
-        date: new Date(date).toLocaleDateString('en-IN', { day: '2-digit', month: 'short' }),
-        liters: Math.round(liters * 100) / 100,
-      }))
-    );
-    setLoading(false);
+    } catch (err) {
+      console.error(err);
+    } finally {
+      setLoading(false);
+    }
   };
 
   if (loading) return <div className="h-64 flex items-center justify-center"><Spinner /></div>;
@@ -56,7 +109,7 @@ export default function MilkTrendChart() {
           </linearGradient>
         </defs>
         <CartesianGrid strokeDasharray="3 3" stroke="#E0E8E2" />
-        <XAxis dataKey="date" tick={{ fontSize: 11, fill: '#5A6A5F' }} interval="preserveStartEnd" />
+        <XAxis dataKey="date" tick={{ fontSize: 10, fill: '#5A6A5F' }} interval={data.length > 15 ? Math.ceil(data.length / 8) : 0} height={30} tickMargin={6} />
         <YAxis tick={{ fontSize: 11, fill: '#5A6A5F' }} />
         <Tooltip
           contentStyle={{ borderRadius: 8, border: '1px solid #E0E8E2', boxShadow: '0 4px 16px rgba(0,0,0,0.08)' }}

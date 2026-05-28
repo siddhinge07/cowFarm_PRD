@@ -27,7 +27,7 @@ export default function Login() {
     } catch (err) {
       console.error('[Auth Debug] Login error:', err);
       if (err.message === 'Email not confirmed') {
-        toast.error('Email not confirmed. Please check your inbox or verify your Supabase settings.');
+        toast.error('Email not confirmed. Please check your inbox or verify your server settings.');
       } else {
         toast.error(err.message || 'Login failed');
       }

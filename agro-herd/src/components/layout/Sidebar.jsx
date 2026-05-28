@@ -13,6 +13,7 @@ import {
   ChevronLeft,
   ChevronRight,
   Activity,
+  AlertCircle,
   LogOut,
   X,
 } from 'lucide-react';
@@ -20,7 +21,7 @@ import {
 const navItems = [
   { path: '/', label: 'Dashboard', icon: LayoutDashboard },
   { path: '/cows', label: 'Cows', icon: Beef },
-  { path: '/cycles', label: 'Cycle Tracker', icon: Activity },
+  { path: '/alerts', label: 'Alerts', icon: AlertCircle },
   { path: '/milk', label: 'Milk Records', icon: Milk },
   { path: '/expenses', label: 'Expenses', icon: DollarSign },
   { path: '/health', label: 'Health Records', icon: HeartPulse },

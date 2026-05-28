@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip } from 'recharts';
-import { supabase } from '../../lib/supabase';
+import { api } from '../../lib/api';
 import { formatCurrency } from '../../utils/helpers';
 import { Spinner } from '../common';
 
@@ -19,23 +19,23 @@ export default function ExpenseDonut() {
     const start = new Date(now.getFullYear(), now.getMonth(), 1).toISOString().split('T')[0];
     const end = now.toISOString().split('T')[0];
 
-    const { data: expenses } = await supabase
-      .from('expenses')
-      .select('category, amount')
-      .gte('expense_date', start)
-      .lte('expense_date', end);
+    try {
+      const { data: expenses } = await api.get('/expenses', { from: start, to: end, limit: 1000 });
+      const grouped = {};
+      (expenses || []).forEach(e => {
+        grouped[e.category] = (grouped[e.category] || 0) + Number(e.amount);
+      });
 
-    const grouped = {};
-    (expenses || []).forEach(e => {
-      grouped[e.category] = (grouped[e.category] || 0) + Number(e.amount);
-    });
-
-    setData(
-      Object.entries(grouped)
-        .map(([name, value]) => ({ name: name.charAt(0).toUpperCase() + name.slice(1), value: Math.round(value) }))
-        .sort((a, b) => b.value - a.value)
-    );
-    setLoading(false);
+      setData(
+        Object.entries(grouped)
+          .map(([name, value]) => ({ name: name.charAt(0).toUpperCase() + name.slice(1), value: Math.round(value) }))
+          .sort((a, b) => b.value - a.value)
+      );
+    } catch (error) {
+      console.error(error);
+    } finally {
+      setLoading(false);
+    }
   };
 
   if (loading) return <div className="h-48 flex items-center justify-center"><Spinner /></div>;

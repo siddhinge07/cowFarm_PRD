@@ -1,10 +1,12 @@
 import { useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../../contexts/AuthContext';
-import { supabase } from '../../lib/supabase';
+import { api } from '../../lib/api';
 import { toast } from 'react-toastify';
-import { Save, User, Shield, Bell } from 'lucide-react';
+import { Save, User, Shield, Bell, ArrowLeft } from 'lucide-react';
 
 export default function Settings() {
+  const navigate = useNavigate();
   const { profile, user, fetchProfile } = useAuth();
   const [form, setForm] = useState({
     name: profile?.name || '',
@@ -17,15 +19,14 @@ export default function Settings() {
   const handleProfileSave = async () => {
     setSaving(true);
     try {
-      const { error } = await supabase.from('users').update({
+      await api.put('/auth/profile', {
         name: form.name,
         phone: form.phone || null,
-      }).eq('id', profile.id);
-      if (error) throw error;
-      await fetchProfile(profile.id);
+      });
+      await fetchProfile();
       toast.success('Profile updated');
     } catch (err) {
-      toast.error(err.message);
+      toast.error(err.message || 'Failed to update profile');
     } finally {
       setSaving(false);
     }
@@ -42,12 +43,11 @@ export default function Settings() {
     }
     setChangingPassword(true);
     try {
-      const { error } = await supabase.auth.updateUser({ password: passwordForm.password });
-      if (error) throw error;
+      await api.put('/auth/password', { password: passwordForm.password });
       toast.success('Password changed successfully');
       setPasswordForm({ password: '', confirmPassword: '' });
     } catch (err) {
-      toast.error(err.message);
+      toast.error(err.message || 'Failed to change password');
     } finally {
       setChangingPassword(false);
     }
@@ -55,6 +55,9 @@ export default function Settings() {
 
   return (
     <div className="max-w-2xl mx-auto space-y-6">
+      <button onClick={() => navigate('/')} className="btn-ghost text-sm flex items-center gap-1.5 -ml-2 mb-2">
+        <ArrowLeft size={16} /> Back to Dashboard
+      </button>
       {/* Profile */}
       <div className="card p-6">
         <div className="flex items-center gap-3 mb-6">

@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { supabase } from '../../lib/supabase';
+import { api } from '../../lib/api';
 import { useAuth } from '../../contexts/AuthContext';
 import { formatRelativeTime } from '../../utils/helpers';
 import { Bell, Check, CheckCheck, X, AlertTriangle, HeartPulse, Milk, Activity, Info } from 'lucide-react';
@@ -20,39 +20,47 @@ const priorityColors = {
 };
 
 export default function NotificationPanel({ onClose, onUpdate }) {
-  const { profile } = useAuth();
+  const { user } = useAuth();
   const [notifications, setNotifications] = useState([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     fetchNotifications();
-  }, []);
+  }, [user]);
 
   const fetchNotifications = async () => {
-    if (!profile) return;
+    if (!user) return;
     setLoading(true);
-    const { data } = await supabase
-      .from('notifications')
-      .select('*')
-      .or(`user_id.eq.${profile.id},user_id.is.null`)
-      .order('created_at', { ascending: false })
-      .limit(20);
-    setNotifications(data || []);
-    setLoading(false);
+    try {
+      const res = await api.get('/notifications', { limit: 20 });
+      setNotifications(res.data || []);
+    } catch (err) {
+      console.error(err);
+    } finally {
+      setLoading(false);
+    }
   };
 
   const markAsRead = async (id) => {
-    await supabase.from('notifications').update({ is_read: true }).eq('id', id);
-    setNotifications(prev => prev.map(n => n.id === id ? { ...n, is_read: true } : n));
-    onUpdate?.();
+    try {
+      await api.put(`/notifications/${id}`, { is_read: true });
+      setNotifications(prev => prev.map(n => n.id === id ? { ...n, is_read: true } : n));
+      onUpdate?.();
+    } catch (err) {
+      console.error(err);
+    }
   };
 
   const markAllRead = async () => {
     const unreadIds = notifications.filter(n => !n.is_read).map(n => n.id);
     if (unreadIds.length === 0) return;
-    await supabase.from('notifications').update({ is_read: true }).in('id', unreadIds);
-    setNotifications(prev => prev.map(n => ({ ...n, is_read: true })));
-    onUpdate?.();
+    try {
+      await api.post('/notifications/mark-read', { ids: unreadIds });
+      setNotifications(prev => prev.map(n => ({ ...n, is_read: true })));
+      onUpdate?.();
+    } catch (err) {
+      console.error(err);
+    }
   };
 
   return (

@@ -1,11 +1,11 @@
 import { useState, useEffect } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
-import { supabase } from '../../lib/supabase';
+import { api } from '../../lib/api';
 import { useAuth } from '../../contexts/AuthContext';
 import { BREEDS, HEALTH_STATUSES } from '../../constants';
 import { formatDate, calculateAge, downloadCSV } from '../../utils/helpers';
 import { Badge, Pagination, EmptyState, PageLoader } from '../../components/common';
-import { Plus, Search, Filter, Grid3X3, List, Download, Beef } from 'lucide-react';
+import { Plus, Search, Filter, Grid3X3, List, Download, Beef, ArrowLeft } from 'lucide-react';
 import CowForm from './CowForm';
 
 export default function CowList() {
@@ -41,23 +41,14 @@ export default function CowList() {
     }, 5000);
 
     try {
-      let query = supabase
-        .from('cows')
-        .select('*', { count: 'exact' })
-        .order('created_at', { ascending: false })
-        .range((page - 1) * limit, page * limit - 1);
-
-      if (filters.search) {
-        query = query.or(`tag_number.ilike.%${filters.search}%,name.ilike.%${filters.search}%`);
-      }
-      if (filters.breed) query = query.eq('breed', filters.breed);
-      if (filters.health_status) query = query.eq('health_status', filters.health_status);
-      if (filters.is_milking !== '') query = query.eq('is_milking', filters.is_milking === 'true');
-
-      const timeoutPromise = new Promise((_, reject) => setTimeout(() => reject(new Error('TIMEOUT')), 2500));
-      const res = await Promise.race([query, timeoutPromise]);
-      
-      if (res.error) throw res.error;
+      const res = await api.get('/cows', {
+        page,
+        limit,
+        search: filters.search,
+        breed: filters.breed,
+        health_status: filters.health_status,
+        is_milking: filters.is_milking
+      });
       
       setCows(res.data || []);
       setTotal(res.count || 0);
@@ -102,6 +93,10 @@ export default function CowList() {
 
   return (
     <div className="space-y-4">
+      <button onClick={() => navigate('/')} className="btn-ghost text-sm flex items-center gap-1.5 -ml-2 mb-2">
+        <ArrowLeft size={16} /> Back to Dashboard
+      </button>
+
       {/* Main Feature Tabs */}
       <div className="flex gap-4 border-b border-farm-border mb-4">
         <button

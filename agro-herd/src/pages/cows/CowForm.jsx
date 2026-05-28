@@ -3,12 +3,12 @@ import { useNavigate, useParams } from 'react-router-dom';
 import { useForm } from 'react-hook-form';
 import { yupResolver } from '@hookform/resolvers/yup';
 import * as yup from 'yup';
-import { supabase } from '../../lib/supabase';
+import { api } from '../../lib/api';
 import { useAuth } from '../../contexts/AuthContext';
 import { BREEDS, HEALTH_STATUSES } from '../../constants';
 import { toast } from 'react-toastify';
 import { Save, ArrowLeft } from 'lucide-react';
-import { PageLoader } from '../../components/common';
+import { PageLoader, DateInput } from '../../components/common';
 
 const schema = yup.object({
   tag_number: yup.string().required('Cow ID is required'),
@@ -43,18 +43,21 @@ export default function CowForm({ onSuccess, hideBackBtn }) {
 
   useEffect(() => {
     if (isEdit) {
-      supabase.from('cows').select('*').eq('id', id).single().then(({ data }) => {
+      api.get(`/cows/${id}`).then(({ data }) => {
         if (data) reset({
           ...data,
-          date_of_birth: data.date_of_birth || '',
-          purchase_date: data.purchase_date || '',
+          date_of_birth: data.date_of_birth ? data.date_of_birth.split('T')[0] : '',
+          purchase_date: data.purchase_date ? data.purchase_date.split('T')[0] : '',
           weight_kg: data.weight_kg || '',
           purchase_price: data.purchase_price || '',
         });
         setLoading(false);
+      }).catch(() => {
+        toast.error('Failed to load cow details');
+        setLoading(false);
       });
     }
-  }, [id]);
+  }, [id, reset, isEdit]);
 
   const onSubmit = async (values) => {
     setSaving(true);
@@ -71,96 +74,30 @@ export default function CowForm({ onSuccess, hideBackBtn }) {
         purchase_date: values.purchase_date || null,
         purchase_price: values.purchase_price || null,
         notes: values.notes,
-        added_by: user?.id || 'mock-user-id',
       };
 
-      const timeoutPromise = new Promise((_, reject) => 
-        setTimeout(() => reject(new Error('TIMEOUT')), 2500)
-      );
-
       if (isEdit) {
-        try {
-          const { error } = await Promise.race([
-            supabase.from('cows').update(payload).eq('id', id),
-            timeoutPromise
-          ]);
-          if (error) throw error;
-        } catch (err) {
-          if (err.message !== 'TIMEOUT') throw err;
-          console.warn('Mocking edit success due to timeout');
-        }
+        await api.put(`/cows/${id}`, payload);
         toast.success('Cow updated successfully');
       } else {
-        let newCow = null;
-        try {
-          const { data, error } = await Promise.race([
-            supabase.from('cows').insert(payload).select().single(),
-            timeoutPromise
-          ]);
-          if (error) throw error;
-          newCow = data;
-        } catch (err) {
-          if (err.message !== 'TIMEOUT') throw err;
-          console.warn('Mocking insert success due to timeout');
-          const cowId = `mock-cow-${Date.now()}`;
-          newCow = { id: cowId, ...payload, created_at: new Date().toISOString() };
-          
-          // Save to local localStorage DB for demo persistence
-          const existing = JSON.parse(localStorage.getItem('mock_cows') || '[]');
-          localStorage.setItem('mock_cows', JSON.stringify([newCow, ...existing]));
-        }
+        const { data: newCow } = await api.post('/cows', payload);
         
-        // Handle automated period tracking if provided
         if (values.last_period_date && newCow) {
-          const cowId = newCow.id;
-          
-          try {
-            await Promise.race([
-              supabase.from('estrus_cycles').insert({
-                cow_id: cowId,
-                last_cycle_date: values.last_period_date,
-                cycle_status: 'pending',
-                recorded_by: user?.id || 'mock-user-id'
-              }),
-              timeoutPromise
-            ]);
-            
-            const nextDate = new Date(values.last_period_date);
-            nextDate.setDate(nextDate.getDate() + 21);
-            
-            await Promise.race([
-              supabase.from('notifications').insert({
-                cow_id: cowId,
-                type: 'estrus_alert',
-                title: `Cycle Alert for ${values.tag_number}`,
-                message: `It has been 21 days since the last period. Please check for heat or update cycle status.`,
-                priority: 'high',
-                scheduled_for: nextDate.toISOString()
-              }),
-              timeoutPromise
-            ]);
-          } catch (mockErr) {
-            console.warn('Mocking cycle insert due to timeout');
-            
-            // Save mock cycle date locally
-            const existingCycles = JSON.parse(localStorage.getItem('mock_cycles') || '[]');
-            const mockCycle = {
-              id: `mock-cycle-${Date.now()}`,
-              cow_id: cowId,
-              last_cycle_date: values.last_period_date,
-              cycle_status: 'pending',
-              recorded_by: user?.id || 'mock-user'
-            };
-            localStorage.setItem('mock_cycles', JSON.stringify([mockCycle, ...existingCycles]));
-          }
+          await api.post('/cycles', {
+            cow_id: newCow.id,
+            last_cycle_date: values.last_period_date,
+            cycle_status: 'pending',
+            notes: 'Initial record'
+          }).catch(console.error);
         }
         
         toast.success('Cow added successfully');
       }
+      
       if (onSuccess) onSuccess();
       else navigate('/cows');
     } catch (err) {
-      toast.error(err.message || 'Failed to save');
+      toast.error(err.error || err.message || 'Failed to save');
     } finally {
       setSaving(false);
     }
@@ -202,7 +139,7 @@ export default function CowForm({ onSuccess, hideBackBtn }) {
             </div>
             <div>
               <label className="label">Date of Birth (Optional)</label>
-              <input type="date" {...register('date_of_birth')} className="input-field" max={new Date().toISOString().split('T')[0]} />
+              <DateInput {...register('date_of_birth')} className="input-field" max={new Date().toISOString().split('T')[0]} />
             </div>
           </div>
 
@@ -233,7 +170,7 @@ export default function CowForm({ onSuccess, hideBackBtn }) {
               <h3 className="font-semibold text-brand-primary mb-3">Reproduction Tracking</h3>
               <div className="md:w-1/2">
                 <label className="label">Last Period Date</label>
-                <input type="date" {...register('last_period_date')} className="input-field" max={new Date().toISOString().split('T')[0]} />
+                <DateInput {...register('last_period_date')} className="input-field" max={new Date().toISOString().split('T')[0]} />
                 <p className="text-xs text-farm-text-secondary mt-1">If entered, a Smart Alert will be scheduled 21 days from this date.</p>
               </div>
             </div>
@@ -242,7 +179,7 @@ export default function CowForm({ onSuccess, hideBackBtn }) {
           <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
             <div>
               <label className="label">Purchase Date</label>
-              <input type="date" {...register('purchase_date')} className="input-field" />
+              <DateInput {...register('purchase_date')} className="input-field" />
             </div>
             <div>
               <label className="label">Purchase Price (₹)</label>

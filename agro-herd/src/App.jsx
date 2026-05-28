@@ -59,7 +59,8 @@ function AppRoutes() {
         <Route path="cows/new" element={<CowForm />} />
         <Route path="cows/:id" element={<CowDetail />} />
         <Route path="cows/:id/edit" element={<CowForm />} />
-        <Route path="cycles" element={<CycleTracker />} />
+        <Route path="alerts" element={<CycleTracker />} />
+        <Route path="cycles" element={<Navigate to="/alerts" replace />} />
         <Route path="milk" element={<MilkList />} />
         <Route path="expenses" element={<ExpenseList />} />
         <Route path="health" element={<HealthList />} />

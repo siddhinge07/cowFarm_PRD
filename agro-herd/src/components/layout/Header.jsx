@@ -1,7 +1,7 @@
 import { Menu, Bell, Search, User } from 'lucide-react';
 import { useAuth } from '../../contexts/AuthContext';
 import { useState, useEffect } from 'react';
-import { supabase } from '../../lib/supabase';
+import { api } from '../../lib/api';
 import { useNavigate, useLocation } from 'react-router-dom';
 import NotificationPanel from '../notifications/NotificationPanel';
 
@@ -18,7 +18,7 @@ const pageTitles = {
 };
 
 export default function Header({ onMenuClick }) {
-  const { profile } = useAuth();
+  const { user } = useAuth();
   const location = useLocation();
   const navigate = useNavigate();
   const [unreadCount, setUnreadCount] = useState(0);
@@ -30,16 +30,16 @@ export default function Header({ onMenuClick }) {
 
   useEffect(() => {
     fetchUnreadCount();
-  }, [profile]);
+  }, [user]);
 
   const fetchUnreadCount = async () => {
-    if (!profile) return;
-    const { count } = await supabase
-      .from('notifications')
-      .select('*', { count: 'exact', head: true })
-      .eq('is_read', false)
-      .or(`user_id.eq.${profile.id},user_id.is.null`);
-    setUnreadCount(count || 0);
+    if (!user) return;
+    try {
+      const res = await api.get('/notifications/count');
+      setUnreadCount(res.count || 0);
+    } catch (error) {
+      console.error(error);
+    }
   };
 
   const handleSearch = (e) => {
@@ -105,10 +105,10 @@ export default function Header({ onMenuClick }) {
           </div>
           <div className="hidden md:block">
             <p className="text-sm font-medium text-farm-text-primary leading-tight">
-              {profile?.name || 'User'}
+              {user?.name || 'User'}
             </p>
             <p className="text-xs text-farm-text-secondary capitalize">
-              {profile?.role || 'worker'}
+              {user?.role || 'worker'}
             </p>
           </div>
         </div>

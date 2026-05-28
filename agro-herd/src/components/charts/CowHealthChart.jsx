@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Cell } from 'recharts';
-import { supabase } from '../../lib/supabase';
+import { api } from '../../lib/api';
 import { Spinner } from '../common';
 
 const STATUS_COLORS = {
@@ -21,21 +21,26 @@ export default function CowHealthChart() {
   }, []);
 
   const fetchData = async () => {
-    const { data: cows } = await supabase.from('cows').select('health_status');
-    const counts = {};
-    (cows || []).forEach(c => {
-      counts[c.health_status] = (counts[c.health_status] || 0) + 1;
-    });
-    setData(
-      Object.entries(counts)
-        .map(([status, count]) => ({
-          status: status.charAt(0).toUpperCase() + status.slice(1),
-          count,
-          key: status,
-        }))
-        .sort((a, b) => b.count - a.count)
-    );
-    setLoading(false);
+    try {
+      const { data: cows } = await api.get('/cows');
+      const counts = {};
+      (cows || []).forEach(c => {
+        counts[c.health_status] = (counts[c.health_status] || 0) + 1;
+      });
+      setData(
+        Object.entries(counts)
+          .map(([status, count]) => ({
+            status: status.charAt(0).toUpperCase() + status.slice(1),
+            count,
+            key: status,
+          }))
+          .sort((a, b) => b.count - a.count)
+      );
+    } catch (error) {
+      console.error(error);
+    } finally {
+      setLoading(false);
+    }
   };
 
   if (loading) return <div className="h-48 flex items-center justify-center"><Spinner /></div>;

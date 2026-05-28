@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { supabase } from '../../lib/supabase';
+import { api } from '../../lib/api';
 import { useAuth } from '../../contexts/AuthContext';
 import { formatRelativeTime } from '../../utils/helpers';
 import { AlertTriangle, Activity, HeartPulse, Milk, Bell } from 'lucide-react';
@@ -19,25 +19,24 @@ const priorityBorder = {
 };
 
 export default function AlertPanel() {
-  const { profile } = useAuth();
+  const { user } = useAuth();
   const [alerts, setAlerts] = useState([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     fetchAlerts();
-  }, [profile]);
+  }, [user]);
 
   const fetchAlerts = async () => {
-    if (!profile) return;
-    const { data } = await supabase
-      .from('notifications')
-      .select('*')
-      .eq('is_read', false)
-      .or(`user_id.eq.${profile.id},user_id.is.null`)
-      .order('created_at', { ascending: false })
-      .limit(8);
-    setAlerts(data || []);
-    setLoading(false);
+    if (!user) return;
+    try {
+      const res = await api.get('/notifications', { is_read: false, limit: 8 });
+      setAlerts(res.data || []);
+    } catch (error) {
+      console.error(error);
+    } finally {
+      setLoading(false);
+    }
   };
 
   if (loading) return <div className="animate-pulse space-y-3">{[1,2,3].map(i => <div key={i} className="h-14 bg-gray-100 rounded-lg" />)}</div>;

@@ -1,10 +1,13 @@
 import { useState, useEffect } from 'react';
-import { supabase } from '../../lib/supabase';
-import { formatCurrency, formatNumber, getDateRange, downloadCSV } from '../../utils/helpers';
+import { useNavigate } from 'react-router-dom';
+import { api } from '../../lib/api';
+import { formatCurrency, formatNumber, getDateRange, downloadCSV, formatDate } from '../../utils/helpers';
 import { PageLoader } from '../../components/common';
-import { Download, BarChart3, TrendingUp, DollarSign, Milk } from 'lucide-react';
+import { Download, BarChart3, TrendingUp, DollarSign, Milk, ArrowLeft } from 'lucide-react';
+import { toast } from 'react-toastify';
 
 export default function Reports() {
+  const navigate = useNavigate();
   const [period, setPeriod] = useState('month');
   const [loading, setLoading] = useState(true);
   const [data, setData] = useState({ income: 0, expenses: 0, profit: 0, liters: 0, milkRecords: [], expenseRecords: [] });
@@ -15,27 +18,30 @@ export default function Reports() {
     setLoading(true);
     const range = getDateRange(period);
     
-    const [milkRes, expRes] = await Promise.all([
-      supabase.from('milk_records').select('*, cows(tag_number, name)')
-        .gte('record_date', range.start).lte('record_date', range.end).order('record_date', { ascending: false }),
-      supabase.from('expenses').select('*, cows(tag_number, name)')
-        .gte('expense_date', range.start).lte('expense_date', range.end).order('expense_date', { ascending: false }),
-    ]);
+    try {
+      const [milkRes, expRes] = await Promise.all([
+        api.get('/milk', { from: range.start, to: range.end, limit: 1000 }),
+        api.get('/expenses', { from: range.start, to: range.end, limit: 1000 })
+      ]);
 
-    const milkRecords = milkRes.data || [];
-    const expenseRecords = expRes.data || [];
-    
-    const income = milkRecords.reduce((s, r) => s + (Number(r.quantity_liters) * Number(r.price_per_liter)), 0);
-    const liters = milkRecords.reduce((s, r) => s + Number(r.quantity_liters), 0);
-    const expenses = expenseRecords.reduce((s, r) => s + Number(r.amount), 0);
+      const milkRecords = milkRes.data || [];
+      const expenseRecords = expRes.data || [];
+      
+      const income = milkRecords.reduce((s, r) => s + (Number(r.quantity_liters) * Number(r.price_per_liter)), 0);
+      const liters = milkRecords.reduce((s, r) => s + Number(r.quantity_liters), 0);
+      const expenses = expenseRecords.reduce((s, r) => s + Number(r.amount), 0);
 
-    setData({ income, expenses, profit: income - expenses, liters, milkRecords, expenseRecords });
-    setLoading(false);
+      setData({ income, expenses, profit: income - expenses, liters, milkRecords, expenseRecords });
+    } catch (err) {
+      toast.error('Failed to load report data');
+    } finally {
+      setLoading(false);
+    }
   };
 
   const exportMilkCSV = () => {
     downloadCSV(data.milkRecords.map(r => ({
-      Date: r.record_date, Cow: r.cows?.tag_number || '', Session: r.session,
+      Date: formatDate(r.record_date), Cow: r.cows?.tag_number || r.tag_number || r.cow_id, Session: r.session,
       Liters: r.quantity_liters, 'Price/L': r.price_per_liter,
       Income: (r.quantity_liters * r.price_per_liter).toFixed(2), Grade: r.quality_grade,
     })), 'milk_report');
@@ -43,8 +49,8 @@ export default function Reports() {
 
   const exportExpenseCSV = () => {
     downloadCSV(data.expenseRecords.map(e => ({
-      Date: e.expense_date, Category: e.category, 'Sub-category': e.sub_category || '',
-      Amount: e.amount, Cow: e.cows?.tag_number || 'Farm-wide', Vendor: e.vendor || '',
+      Date: formatDate(e.expense_date), Category: e.category, 'Sub-category': e.sub_category || '',
+      Amount: e.amount, Cow: e.cows?.tag_number || e.cow_id || 'Farm-wide', Vendor: e.vendor || '',
     })), 'expense_report');
   };
 
@@ -52,6 +58,9 @@ export default function Reports() {
 
   return (
     <div className="space-y-6">
+      <button onClick={() => navigate('/')} className="btn-ghost text-sm flex items-center gap-1.5 -ml-2 mb-2">
+        <ArrowLeft size={16} /> Back to Dashboard
+      </button>
       {/* Period Selector */}
       <div className="flex items-center gap-2 flex-wrap">
         {[
@@ -139,8 +148,8 @@ export default function Reports() {
                   <tbody>
                     {data.milkRecords.slice(0, 50).map(r => (
                       <tr key={r.id} className="border-b border-farm-border/30">
-                        <td className="px-3 py-2">{r.record_date}</td>
-                        <td className="px-3 py-2 font-mono text-brand-primary">{r.cows?.tag_number}</td>
+                        <td className="px-3 py-2">{formatDate(r.record_date)}</td>
+                        <td className="px-3 py-2 font-mono text-brand-primary">{r.cows?.tag_number || r.tag_number || r.cow_id}</td>
                         <td className="px-3 py-2 text-right font-mono">{r.quantity_liters}</td>
                         <td className="px-3 py-2 text-right font-mono text-success">{formatCurrency(r.quantity_liters * r.price_per_liter)}</td>
                       </tr>
@@ -171,9 +180,9 @@ export default function Reports() {
                   <tbody>
                     {data.expenseRecords.slice(0, 50).map(e => (
                       <tr key={e.id} className="border-b border-farm-border/30">
-                        <td className="px-3 py-2">{e.expense_date}</td>
+                        <td className="px-3 py-2">{formatDate(e.expense_date)}</td>
                         <td className="px-3 py-2 capitalize">{e.category}</td>
-                        <td className="px-3 py-2 font-mono text-brand-primary">{e.cows?.tag_number || 'Farm'}</td>
+                        <td className="px-3 py-2 font-mono text-brand-primary">{e.cows?.tag_number || e.cow_id || 'Farm'}</td>
                         <td className="px-3 py-2 text-right font-mono text-danger">{formatCurrency(e.amount)}</td>
                       </tr>
                     ))}

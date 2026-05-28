@@ -1,14 +1,15 @@
 import { useState, useEffect } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
-import { supabase } from '../../lib/supabase';
+import { api } from '../../lib/api';
 import { useAuth } from '../../contexts/AuthContext';
 import { EXPENSE_CATEGORIES } from '../../constants';
 import { formatDate, formatCurrency, downloadCSV, getDateRange } from '../../utils/helpers';
-import { Badge, Pagination, EmptyState, PageLoader, Modal } from '../../components/common';
+import { Badge, Pagination, EmptyState, PageLoader, Modal, DateInput } from '../../components/common';
 import { toast } from 'react-toastify';
-import { Plus, Search, Download, DollarSign, Trash2 } from 'lucide-react';
+import { Plus, Search, Download, DollarSign, Trash2, ArrowLeft } from 'lucide-react';
 
 export default function ExpenseList() {
+  const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
   const { canEdit, isAdmin, user } = useAuth();
   const [expenses, setExpenses] = useState([]);
@@ -26,7 +27,7 @@ export default function ExpenseList() {
   const limit = 20;
 
   useEffect(() => {
-    supabase.from('cows').select('id, tag_number, name').order('tag_number').then(({ data }) => setCows(data || []));
+    api.get('/cows').then(({ data }) => setCows(data || []));
   }, []);
 
   useEffect(() => {
@@ -46,21 +47,22 @@ export default function ExpenseList() {
 
   const fetchExpenses = async () => {
     setLoading(true);
-    let query = supabase
-      .from('expenses')
-      .select('*, cows(tag_number, name)', { count: 'exact' })
-      .order('expense_date', { ascending: false })
-      .range((page - 1) * limit, page * limit - 1);
-
-    if (filters.category) query = query.eq('category', filters.category);
-    if (filters.cow_id) query = query.eq('cow_id', filters.cow_id);
-    if (filters.from) query = query.gte('expense_date', filters.from);
-    if (filters.to) query = query.lte('expense_date', filters.to);
-
-    const { data, count } = await query;
-    setExpenses(data || []);
-    setTotal(count || 0);
-    setLoading(false);
+    try {
+      const { data, count } = await api.get('/expenses', {
+        page,
+        limit,
+        category: filters.category,
+        cow_id: filters.cow_id,
+        from: filters.from,
+        to: filters.to
+      });
+      setExpenses(data || []);
+      setTotal(count || 0);
+    } catch (err) {
+      toast.error('Failed to load expenses');
+    } finally {
+      setLoading(false);
+    }
   };
 
   const handleSave = async () => {
@@ -70,7 +72,7 @@ export default function ExpenseList() {
     }
     setSaving(true);
     try {
-      const { error } = await supabase.from('expenses').insert({
+      await api.post('/expenses', {
         cow_id: form.cow_id || null,
         category: form.category,
         sub_category: form.sub_category || null,
@@ -78,15 +80,13 @@ export default function ExpenseList() {
         expense_date: form.expense_date,
         vendor: form.vendor || null,
         notes: form.notes || null,
-        added_by: user?.id,
       });
-      if (error) throw error;
       toast.success('Expense added');
       setModalOpen(false);
       setForm({ cow_id: '', category: 'food', sub_category: '', amount: '', expense_date: new Date().toISOString().split('T')[0], vendor: '', notes: '' });
       fetchExpenses();
     } catch (err) {
-      toast.error(err.message);
+      toast.error(err.message || 'Failed to add expense');
     } finally {
       setSaving(false);
     }
@@ -94,9 +94,13 @@ export default function ExpenseList() {
 
   const handleDelete = async (id) => {
     if (!window.confirm('Delete this expense?')) return;
-    await supabase.from('expenses').delete().eq('id', id);
-    toast.success('Expense deleted');
-    fetchExpenses();
+    try {
+      await api.delete(`/expenses/${id}`);
+      toast.success('Expense deleted');
+      fetchExpenses();
+    } catch (err) {
+      toast.error(err.message || 'Failed to delete expense');
+    }
   };
 
   const handleExport = () => {
@@ -105,7 +109,7 @@ export default function ExpenseList() {
       Category: e.category,
       'Sub-category': e.sub_category || '',
       Amount: e.amount,
-      Cow: e.cows?.tag_number || 'Farm-wide',
+      Cow: e.cows?.tag_number || e.cow_id || 'Farm-wide',
       Vendor: e.vendor || '',
       Notes: e.notes || '',
     }));
@@ -118,6 +122,9 @@ export default function ExpenseList() {
 
   return (
     <div className="space-y-4">
+      <button onClick={() => navigate('/')} className="btn-ghost text-sm flex items-center gap-1.5 -ml-2 mb-2">
+        <ArrowLeft size={16} /> Back to Dashboard
+      </button>
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div className="flex items-center gap-4">
           <p className="text-sm text-farm-text-secondary">{total} expense{total !== 1 ? 's' : ''}</p>
@@ -130,8 +137,8 @@ export default function ExpenseList() {
             <option value="">All categories</option>
             {EXPENSE_CATEGORIES.map(c => <option key={c.value} value={c.value}>{c.label}</option>)}
           </select>
-          <input type="date" value={filters.from} onChange={e => setFilters(f => ({ ...f, from: e.target.value }))} className="input-field text-sm py-2 w-36" placeholder="From" />
-          <input type="date" value={filters.to} onChange={e => setFilters(f => ({ ...f, to: e.target.value }))} className="input-field text-sm py-2 w-36" placeholder="To" />
+          <DateInput value={filters.from} onChange={val => setFilters(f => ({ ...f, from: val }))} className="input-field text-sm py-2 w-36" placeholder="From" />
+          <DateInput value={filters.to} onChange={val => setFilters(f => ({ ...f, to: val }))} className="input-field text-sm py-2 w-36" placeholder="To" />
           <button onClick={handleExport} className="btn-secondary py-2 px-3 text-sm"><Download size={16} /></button>
           {canEdit() && (
             <button onClick={() => setModalOpen(true)} className="btn-primary py-2 px-4 text-sm flex items-center gap-1.5">
@@ -203,7 +210,7 @@ export default function ExpenseList() {
             </div>
             <div>
               <label className="label">Date *</label>
-              <input type="date" value={form.expense_date} onChange={e => setForm(f => ({ ...f, expense_date: e.target.value }))} className="input-field" />
+              <DateInput value={form.expense_date} onChange={val => setForm(f => ({ ...f, expense_date: val }))} className="input-field" />
             </div>
           </div>
           <div>

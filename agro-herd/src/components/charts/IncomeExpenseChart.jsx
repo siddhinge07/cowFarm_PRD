@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts';
-import { supabase } from '../../lib/supabase';
+import { api } from '../../lib/api';
 import { Spinner } from '../common';
 
 export default function IncomeExpenseChart() {
@@ -23,21 +23,24 @@ export default function IncomeExpenseChart() {
       });
     }
 
-    const result = [];
-    for (const m of months) {
-      const [incRes, expRes] = await Promise.all([
-        supabase.from('milk_records').select('quantity_liters, price_per_liter')
-          .gte('record_date', m.start).lte('record_date', m.end),
-        supabase.from('expenses').select('amount')
-          .gte('expense_date', m.start).lte('expense_date', m.end),
-      ]);
-      const income = (incRes.data || []).reduce((s, r) => s + (Number(r.quantity_liters) * Number(r.price_per_liter)), 0);
-      const expenses = (expRes.data || []).reduce((s, r) => s + Number(r.amount), 0);
-      result.push({ month: m.label, Income: Math.round(income), Expenses: Math.round(expenses) });
-    }
+    try {
+      const result = [];
+      for (const m of months) {
+        const [incRes, expRes] = await Promise.all([
+          api.get('/milk', { from: m.start, to: m.end, limit: 1000 }),
+          api.get('/expenses', { from: m.start, to: m.end, limit: 1000 })
+        ]);
+        const income = (incRes.data || []).reduce((s, r) => s + (Number(r.quantity_liters) * Number(r.price_per_liter)), 0);
+        const expenses = (expRes.data || []).reduce((s, r) => s + Number(r.amount), 0);
+        result.push({ month: m.label, Income: Math.round(income), Expenses: Math.round(expenses) });
+      }
 
-    setData(result);
-    setLoading(false);
+      setData(result);
+    } catch (err) {
+      console.error(err);
+    } finally {
+      setLoading(false);
+    }
   };
 
   if (loading) return <div className="h-64 flex items-center justify-center"><Spinner /></div>;

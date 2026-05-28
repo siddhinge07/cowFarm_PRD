@@ -1,5 +1,5 @@
 import { createContext, useContext, useEffect, useState } from 'react';
-import { supabase } from '../lib/supabase';
+import { api } from '../lib/api';
 
 const AuthContext = createContext({});
 
@@ -10,142 +10,90 @@ export function AuthProvider({ children }) {
   const [profile, setProfile] = useState(null);
   const [loading, setLoading] = useState(true);
 
-  const fetchProfile = async (userId) => {
-    try {
-      const { data } = await supabase
-        .from('users')
-        .select('*')
-        .eq('id', userId)
-        .single();
-      setProfile(data);
-    } catch (err) {
-      console.error('Error fetching profile:', err);
-    }
-  };
-
   useEffect(() => {
     let isMounted = true;
-    console.log('[AuthContext] Mounting AuthProvider');
-
-    // Failsafe timeout to prevent infinite spinner
-    const timeoutId = setTimeout(() => {
-      console.warn('[AuthContext] Auth initialization timed out!');
-      if (isMounted) setLoading(false);
-    }, 5000);
-
+    const token = localStorage.getItem('agroherd_access_token');
+    
     const initAuth = async () => {
+      if (!token) {
+        if (isMounted) setLoading(false);
+        return;
+      }
       try {
-        console.log('[AuthContext] Fetching session...');
-        // We will mock an automatic completion just in case supabase is completely locked
-        const { data, error } = await supabase.auth.getSession();
-        console.log('[AuthContext] Session fetched:', { data, error });
-        if (error) throw error;
-        
-        if (isMounted) setUser(data?.session?.user ?? null);
-        if (isMounted && data?.session?.user) {
-          console.log('[AuthContext] Fetching profile...');
-          await fetchProfile(data.session.user.id);
-          console.log('[AuthContext] Profile fetched.');
+        const { data } = await api.get('/auth/me');
+        if (isMounted) {
+          setUser(data);
+          setProfile(data);
         }
       } catch (error) {
         console.error('[AuthContext] Error getting session:', error);
+        localStorage.removeItem('agroherd_access_token');
       } finally {
-         console.log('[AuthContext] Initial auth check finished, setting loading=false');
-         clearTimeout(timeoutId);
-         if (isMounted) setLoading(false);
+        if (isMounted) setLoading(false);
       }
     };
-
     initAuth();
-
-    let subscription = null;
-    try {
-      const { data } = supabase.auth.onAuthStateChange(
-        async (_event, session) => {
-          console.log('[AuthContext] Auth state changed:', _event);
-          if (!isMounted) return;
-          setUser(session?.user ?? null);
-          if (session?.user) {
-            await fetchProfile(session.user.id);
-          } else {
-            setProfile(null);
-          }
-          if (isMounted) setLoading(false);
-        }
-      );
-      subscription = data?.subscription;
-    } catch (e) {
-      console.error('[AuthContext] Error setting up auth listener:', e);
-    }
-
-    return () => {
-      console.log('[AuthContext] Unmounting AuthProvider');
-      isMounted = false;
-      clearTimeout(timeoutId);
-      if (subscription) subscription.unsubscribe();
-    };
+    return () => { isMounted = false; };
   }, []);
 
-  const signUp = async (email, password, metadata) => {
-    console.log('[Auth Debug] signUp attempt:', email);
-    const { data, error } = await supabase.auth.signUp({
-      email,
-      password,
-      options: { data: metadata },
-    });
-    console.log('[Auth Debug] signUp response:', { data, error });
-    if (error) throw error;
-
-    if (data.user) {
-      const { error: profileErr } = await supabase.from('users').insert({
-        id: data.user.id,
-        name: metadata.name,
-        email: email,
-        role: metadata.role || 'worker',
-        phone: metadata.phone || null,
-      });
-      if (profileErr) console.error('Profile insert error:', profileErr);
+  const fetchProfile = async () => {
+    try {
+      const { data } = await api.get('/auth/me');
+      setUser(data);
+      setProfile(data);
+    } catch (err) {
+      console.error(err);
     }
+  };
+
+  const signUp = async (email, password, metadata) => {
+    const { data } = await api.post('/auth/register', { email, password, data: metadata });
+    localStorage.setItem('agroherd_access_token', data.session.access_token);
+    setUser(data.user);
+    setProfile(data.user);
     return data;
   };
 
   const signIn = async (email, password) => {
-    console.log('[Auth Debug] signIn attempt:', email);
-    const { data, error } = await supabase.auth.signInWithPassword({
-      email,
-      password,
-    });
-    console.log('[Auth Debug] signIn response:', { data, error });
-    if (error) throw error;
+    const { data } = await api.post('/auth/login', { email, password });
+    localStorage.setItem('agroherd_access_token', data.session.access_token);
+    setUser(data.user);
+    setProfile(data.user);
     return data;
   };
 
   const signOut = async () => {
-    const { error } = await supabase.auth.signOut();
-    if (error) throw error;
+    localStorage.removeItem('agroherd_access_token');
     setUser(null);
     setProfile(null);
   };
 
   const hasRole = (...roles) => {
-    if (!profile) return true; // Fallback for local demo when DB fails
+    if (!profile) return false;
     return roles.includes(profile.role);
   };
 
-  const canEdit = () => true; // Always allow editing in demo mode
-  const isAdmin = () => true; // Always admin in demo mode
+  const canEdit = () => {
+    if (!profile) return false;
+    return ['admin', 'manager'].includes(profile.role);
+  };
+
+  const isAdmin = () => {
+    if (!profile) return false;
+    return profile.role === 'admin';
+  };
 
   const value = {
     user,
     profile,
     loading,
+    fetchProfile,
     signUp,
     signIn,
     signOut,
     hasRole,
     canEdit,
-    isAdmin,
-    fetchProfile,
+    isAdmin
   };
 
   return (

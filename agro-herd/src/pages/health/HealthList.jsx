@@ -1,13 +1,15 @@
 import { useState, useEffect } from 'react';
-import { supabase } from '../../lib/supabase';
+import { useNavigate } from 'react-router-dom';
+import { api } from '../../lib/api';
 import { useAuth } from '../../contexts/AuthContext';
 import { HEALTH_RECORD_TYPES } from '../../constants';
 import { formatDate, formatCurrency } from '../../utils/helpers';
-import { Badge, Pagination, EmptyState, PageLoader, Modal } from '../../components/common';
+import { Badge, Pagination, EmptyState, PageLoader, Modal, DateInput } from '../../components/common';
 import { toast } from 'react-toastify';
-import { Plus, HeartPulse, Trash2 } from 'lucide-react';
+import { Plus, HeartPulse, Trash2, ArrowLeft } from 'lucide-react';
 
 export default function HealthList() {
+  const navigate = useNavigate();
   const { canEdit, isAdmin, user } = useAuth();
   const [records, setRecords] = useState([]);
   const [cows, setCows] = useState([]);
@@ -25,42 +27,42 @@ export default function HealthList() {
   const limit = 20;
 
   useEffect(() => {
-    supabase.from('cows').select('id, tag_number, name').order('tag_number').then(({ data }) => setCows(data || []));
+    api.get('/cows').then(({ data }) => setCows(data || []));
   }, []);
 
   useEffect(() => { fetchRecords(); }, [page, filters]);
 
   const fetchRecords = async () => {
     setLoading(true);
-    let query = supabase
-      .from('health_records')
-      .select('*, cows(tag_number, name)', { count: 'exact' })
-      .order('record_date', { ascending: false })
-      .range((page - 1) * limit, page * limit - 1);
-
-    if (filters.record_type) query = query.eq('record_type', filters.record_type);
-    if (filters.cow_id) query = query.eq('cow_id', filters.cow_id);
-
-    const { data, count } = await query;
-    setRecords(data || []);
-    setTotal(count || 0);
-    setLoading(false);
+    try {
+      const { data, count } = await api.get('/health', {
+        page,
+        limit,
+        record_type: filters.record_type,
+        cow_id: filters.cow_id
+      });
+      setRecords(data || []);
+      setTotal(count || 0);
+    } catch (err) {
+      toast.error('Failed to load health records');
+    } finally {
+      setLoading(false);
+    }
   };
 
   const handleSave = async () => {
     if (!form.cow_id || !form.record_date) { toast.error('Cow and date are required'); return; }
     setSaving(true);
     try {
-      const { error } = await supabase.from('health_records').insert({
+      await api.post('/health', {
         cow_id: form.cow_id, record_date: form.record_date, record_type: form.record_type,
         diagnosis: form.diagnosis || null, treatment: form.treatment || null,
         medication: form.medication || null, dosage: form.dosage || null,
         vet_name: form.vet_name || null, vet_contact: form.vet_contact || null,
         follow_up_date: form.follow_up_date || null,
         cost: form.cost ? parseFloat(form.cost) : null,
-        notes: form.notes || null, recorded_by: user?.id,
+        notes: form.notes || null,
       });
-      if (error) throw error;
       toast.success('Health record added');
       setModalOpen(false);
       setForm({
@@ -69,21 +71,28 @@ export default function HealthList() {
         follow_up_date: '', cost: '', notes: '',
       });
       fetchRecords();
-    } catch (err) { toast.error(err.message); }
+    } catch (err) { toast.error(err.message || 'Failed to add health record'); }
     finally { setSaving(false); }
   };
 
   const handleDelete = async (id) => {
     if (!window.confirm('Delete this record?')) return;
-    await supabase.from('health_records').delete().eq('id', id);
-    toast.success('Record deleted');
-    fetchRecords();
+    try {
+      await api.delete(`/health/${id}`);
+      toast.success('Record deleted');
+      fetchRecords();
+    } catch (err) {
+      toast.error(err.message || 'Failed to delete record');
+    }
   };
 
   const totalPages = Math.ceil(total / limit);
 
   return (
     <div className="space-y-4">
+      <button onClick={() => navigate('/')} className="btn-ghost text-sm flex items-center gap-1.5 -ml-2 mb-2">
+        <ArrowLeft size={16} /> Back to Dashboard
+      </button>
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
         <p className="text-sm text-farm-text-secondary">{total} health record{total !== 1 ? 's' : ''}</p>
         <div className="flex items-center gap-2 flex-wrap">
@@ -118,7 +127,7 @@ export default function HealthList() {
               {records.map(r => (
                 <tr key={r.id} className="table-row cursor-default">
                   <td className="px-4 py-3 text-sm">{formatDate(r.record_date)}</td>
-                  <td className="px-4 py-3"><span className="font-mono text-brand-primary text-sm">{r.cows?.tag_number}</span></td>
+                  <td className="px-4 py-3"><span className="font-mono text-brand-primary text-sm">{r.cows?.tag_number || r.cow_id}</span></td>
                   <td className="px-4 py-3"><Badge variant="primary">{r.record_type}</Badge></td>
                   <td className="px-4 py-3 text-sm hidden md:table-cell text-farm-text-secondary truncate max-w-[200px]">{r.diagnosis || '—'}</td>
                   <td className="px-4 py-3 text-sm hidden lg:table-cell text-farm-text-secondary">{r.vet_name || '—'}</td>
@@ -147,7 +156,7 @@ export default function HealthList() {
             </div>
             <div>
               <label className="label">Date *</label>
-              <input type="date" value={form.record_date} onChange={e => setForm(f => ({ ...f, record_date: e.target.value }))} className="input-field" />
+              <DateInput value={form.record_date} onChange={e => setForm(f => ({ ...f, record_date: e.target.value }))} className="input-field" />
             </div>
             <div>
               <label className="label">Type *</label>
@@ -181,7 +190,7 @@ export default function HealthList() {
             </div>
             <div>
               <label className="label">Follow-up Date</label>
-              <input type="date" value={form.follow_up_date} onChange={e => setForm(f => ({ ...f, follow_up_date: e.target.value }))} className="input-field" />
+              <DateInput value={form.follow_up_date} onChange={e => setForm(f => ({ ...f, follow_up_date: e.target.value }))} className="input-field" />
             </div>
             <div>
               <label className="label">Cost (₹)</label>

@@ -1,10 +1,11 @@
 import { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { supabase } from '../../lib/supabase';
+import { api } from '../../lib/api';
 import { useAuth } from '../../contexts/AuthContext';
 import { formatDate, formatCurrency, calculateAge } from '../../utils/helpers';
-import { Badge, PageLoader, ConfirmDialog, Modal } from '../../components/common';
+import { Badge, PageLoader, ConfirmDialog, Modal, DateInput } from '../../components/common';
 import { toast } from 'react-toastify';
+import { MILK_SESSIONS, QUALITY_GRADES } from '../../constants';
 import {
   ArrowLeft, Edit, Trash2, Milk, DollarSign, HeartPulse, Activity,
   Calendar, Weight, Tag, Heart
@@ -27,6 +28,31 @@ export default function CowDetail() {
   const [periodModalOpen, setPeriodModalOpen] = useState(false);
   const [periodDate, setPeriodDate] = useState('');
   const [savingPeriod, setSavingPeriod] = useState(false);
+  const [milkModalOpen, setMilkModalOpen] = useState(false);
+  const [savingMilk, setSavingMilk] = useState(false);
+  const [milkDeleteOpen, setMilkDeleteOpen] = useState(false);
+  const [milkRecordToDelete, setMilkRecordToDelete] = useState(null);
+  const [milkForm, setMilkForm] = useState({
+    record_date: new Date().toISOString().split('T')[0],
+    session: 'full_day',
+    quantity_liters: '',
+    price_per_liter: '',
+    quality_grade: 'A',
+    fat_percentage: '',
+    notes: '',
+  });
+
+  const resetMilkForm = () => {
+    setMilkForm({
+      record_date: new Date().toISOString().split('T')[0],
+      session: 'full_day',
+      quantity_liters: '',
+      price_per_liter: '',
+      quality_grade: 'A',
+      fat_percentage: '',
+      notes: '',
+    });
+  };
 
   useEffect(() => {
     fetchCow();
@@ -38,23 +64,11 @@ export default function CowDetail() {
 
   const fetchCow = async () => {
     try {
-      const timeoutPromise = new Promise((_, reject) => setTimeout(() => reject(new Error('TIMEOUT')), 2500));
+      const { data } = await api.get(`/cows/${id}`);
       
-      const res = await Promise.race([
-        supabase.from('cows').select('*').eq('id', id).single(),
-        timeoutPromise
-      ]);
-      
-      if (res.error && res.error.code !== 'PGRST116') throw res.error; 
-      
-      if (!res.data) throw new Error('NOT_FOUND_REMOTE');
-
-      const milkRes = await Promise.race([
-        supabase.from('milk_records').select('quantity_liters').eq('cow_id', id),
-        timeoutPromise
-      ]).catch(() => ({ data: [] }));
-
+      const milkRes = await api.get('/milk', { cow_id: id }).catch(() => ({ data: [] }));
       const milkRecords = milkRes?.data || [];
+      
       if (milkRecords.length > 0) {
         const total = milkRecords.reduce((sum, r) => sum + Number(r.quantity_liters), 0);
         setAvgMilk((total / milkRecords.length).toFixed(1));
@@ -62,18 +76,9 @@ export default function CowDetail() {
         setAvgMilk(0);
       }
       
-      setCow(res.data);
+      setCow(data);
     } catch (err) {
-      console.warn('Fallback to local mock DB due to error:', err.message);
-      const localCows = JSON.parse(localStorage.getItem('mock_cows') || '[]');
-      const foundCow = localCows.find(c => c.id === id || c.id === Number(id));
-      
-      if (foundCow) {
-        setCow(foundCow);
-        setAvgMilk(0);
-      } else {
-         console.error("Cow not found locally or remotely");
-      }
+      toast.error('Failed to load cow details');
     } finally {
       setLoading(false);
     }
@@ -81,101 +86,49 @@ export default function CowDetail() {
 
   const fetchTabData = async () => {
     setTabLoading(true);
-    let query;
-    switch (activeTab) {
-      case 'Milk History':
-        query = supabase.from('milk_records').select('*').eq('cow_id', id).order('record_date', { ascending: false }).limit(50);
-        break;
-      case 'Health Records':
-        query = supabase.from('health_records').select('*').eq('cow_id', id).order('record_date', { ascending: false }).limit(50);
-        break;
-      case 'Expenses':
-        query = supabase.from('expenses').select('*').eq('cow_id', id).order('expense_date', { ascending: false }).limit(50);
-        break;
-      case 'Cycle History':
-        query = supabase.from('estrus_cycles').select('*').eq('cow_id', id).order('last_cycle_date', { ascending: false }).limit(50);
-        break;
-      default:
-        setTabData([]);
-        setTabLoading(false);
-        return;
-    }
-    
     try {
-      const timeoutPromise = new Promise((_, reject) => setTimeout(() => reject(new Error('TIMEOUT')), 2500));
-      const res = await Promise.race([query, timeoutPromise]);
-      if (res.error) throw res.error;
-      setTabData(res.data || []);
-    } catch (err) {
-      console.warn(`Fallback tab data for ${activeTab} due to error:`, err.message);
-      
-      let localData = [];
-      if (activeTab === 'Cycle History') {
-         const allCycles = JSON.parse(localStorage.getItem('mock_cycles') || '[]');
-         localData = allCycles.filter(c => c.cow_id === id || c.cow_id === Number(id));
+      let endpoint;
+      switch (activeTab) {
+        case 'Milk History': endpoint = '/milk'; break;
+        case 'Health Records': endpoint = '/health'; break;
+        case 'Expenses': endpoint = '/expenses'; break;
+        case 'Cycle History': endpoint = '/cycles'; break;
+        default:
+          setTabData([]);
+          setTabLoading(false);
+          return;
       }
-      // Add other tab fallbacks if needed here
       
-      setTabData(localData);
+      const { data } = await api.get(endpoint, { cow_id: id });
+      setTabData(data || []);
+    } catch (err) {
+      toast.error(`Failed to load ${activeTab}`);
+      setTabData([]);
     } finally {
       setTabLoading(false);
     }
   };
 
   const handleDelete = async () => {
-    const { error } = await supabase.from('cows').delete().eq('id', id);
-    if (error) { toast.error('Failed to delete'); return; }
-    toast.success('Cow deleted');
-    navigate('/cows');
+    try {
+      await api.delete(`/cows/${id}`);
+      toast.success('Cow deleted');
+      navigate('/cows');
+    } catch(err) {
+      toast.error('Failed to delete');
+    }
   };
 
   const handleSavePeriod = async () => {
     if (!periodDate) return;
     setSavingPeriod(true);
     try {
-      const timeoutPromise = new Promise((_, reject) => setTimeout(() => reject(new Error('TIMEOUT')), 2500));
-      
-      try {
-        await Promise.race([
-          supabase.from('estrus_cycles').insert({
-            cow_id: id,
-            last_cycle_date: periodDate,
-            cycle_status: 'pending',
-            recorded_by: user?.id || null
-          }),
-          timeoutPromise
-        ]);
-        
-        const nextDate = new Date(periodDate);
-        nextDate.setDate(nextDate.getDate() + 21);
-        await Promise.race([
-          supabase.from('notifications').insert({
-            cow_id: id,
-            type: 'estrus_alert',
-            title: `Cycle Alert for ${cow.tag_number}`,
-            message: `It has been 21 days since the last period. Please check for heat or update cycle status.`,
-            priority: 'high',
-            scheduled_for: nextDate.toISOString()
-          }),
-          timeoutPromise
-        ]);
-      } catch (err) {
-        if (err.message !== 'TIMEOUT') throw err;
-        console.warn('Mocking period date insert due to timeout');
-        
-        // Save mock cycle date locally
-        const existingCycles = JSON.parse(localStorage.getItem('mock_cycles') || '[]');
-        const mockCycle = {
-          id: `mock-cycle-${Date.now()}`,
-          cow_id: id,
-          last_cycle_date: periodDate,
-          cycle_status: 'pending',
-          recorded_by: user?.id || 'mock-user'
-        };
-        localStorage.setItem('mock_cycles', JSON.stringify([mockCycle, ...existingCycles]));
-      }
-
-      toast.success('Period date added and Smart Alert scheduled!');
+      await api.post('/cycles', {
+        cow_id: id,
+        last_cycle_date: periodDate,
+        cycle_status: 'pending'
+      });
+      toast.success('Period date added!');
       setPeriodModalOpen(false);
       setPeriodDate('');
       if (activeTab === 'Cycle History') fetchTabData();
@@ -183,6 +136,53 @@ export default function CowDetail() {
       toast.error('Failed to add period date');
     } finally {
       setSavingPeriod(false);
+    }
+  };
+
+  const handleSaveMilk = async () => {
+    if (!milkForm.quantity_liters) {
+      toast.error('Quantity is required');
+      return;
+    }
+    setSavingMilk(true);
+    try {
+      await api.post('/milk', {
+        cow_id: id,
+        record_date: milkForm.record_date,
+        session: milkForm.session,
+        quantity_liters: parseFloat(milkForm.quantity_liters),
+        price_per_liter: milkForm.price_per_liter ? parseFloat(milkForm.price_per_liter) : null,
+        quality_grade: milkForm.quality_grade,
+        fat_percentage: milkForm.fat_percentage ? parseFloat(milkForm.fat_percentage) : null,
+        notes: milkForm.notes || null,
+      });
+      toast.success('Milk record added successfully!');
+      setMilkModalOpen(false);
+      resetMilkForm();
+      fetchCow();
+      if (activeTab === 'Milk History') fetchTabData();
+    } catch (err) {
+      toast.error(err.message || 'Failed to add milk record');
+    } finally {
+      setSavingMilk(false);
+    }
+  };
+
+  const handleDeleteMilkClick = (recordId) => {
+    setMilkRecordToDelete(recordId);
+    setMilkDeleteOpen(true);
+  };
+
+  const handleDeleteMilkConfirm = async () => {
+    try {
+      await api.delete(`/milk/${milkRecordToDelete}`);
+      toast.success('Milk record deleted successfully!');
+      setMilkDeleteOpen(false);
+      setMilkRecordToDelete(null);
+      fetchCow();
+      if (activeTab === 'Milk History') fetchTabData();
+    } catch (err) {
+      toast.error('Failed to delete milk record');
     }
   };
 
@@ -223,7 +223,7 @@ export default function CowDetail() {
               </button>
             )}
             {canEdit() && (
-              <button onClick={() => navigate(`/milk?add=true&cow_id=${id}`)} className="bg-indigo-500 hover:bg-indigo-600 rounded-lg text-white px-4 py-2 text-sm flex items-center gap-1.5 shadow-md transition-all">
+              <button onClick={() => setMilkModalOpen(true)} className="bg-indigo-500 hover:bg-indigo-600 rounded-lg text-white px-4 py-2 text-sm flex items-center gap-1.5 shadow-md transition-all">
                 <Milk size={14} /> Add Milk
               </button>
             )}
@@ -279,6 +279,7 @@ export default function CowDetail() {
                 ['Age', calculateAge(cow.date_of_birth)],
                 ['Weight', cow.weight_kg ? `${cow.weight_kg} kg` : '—'],
                 ['Color', cow.color || '—'],
+                ...(cow.health_status === 'pregnant' && cow.pregnancy_date ? [['Pregnancy Date', formatDate(cow.pregnancy_date)]] : []),
                 ['Purchase Date', formatDate(cow.purchase_date)],
                 ['Purchase Price', cow.purchase_price ? formatCurrency(cow.purchase_price) : '—'],
               ].map(([label, val]) => (
@@ -309,6 +310,7 @@ export default function CowDetail() {
                   <th className="px-4 py-3 text-right">₹/L</th>
                   <th className="px-4 py-3 text-right">Income</th>
                   <th className="px-4 py-3 text-left hidden md:table-cell">Grade</th>
+                  {canEdit() && <th className="px-4 py-3 text-right">Actions</th>}
                 </tr></thead>
                 <tbody>
                   {tabData.map(r => (
@@ -316,15 +318,22 @@ export default function CowDetail() {
                       <td className="px-4 py-3 text-sm">{formatDate(r.record_date)}</td>
                       <td className="px-4 py-3 text-sm capitalize">{r.session?.replace('_', ' ')}</td>
                       <td className="px-4 py-3 text-sm text-right font-mono">{r.quantity_liters}</td>
-                      <td className="px-4 py-3 text-sm text-right font-mono">{r.price_per_liter}</td>
+                      <td className="px-4 py-3 text-sm text-right font-mono">{r.price_per_liter !== null ? r.price_per_liter : '—'}</td>
                       <td className="px-4 py-3 text-sm text-right font-mono font-medium text-success">
-                        {formatCurrency(r.quantity_liters * r.price_per_liter)}
+                        {r.price_per_liter !== null ? formatCurrency(r.quantity_liters * r.price_per_liter) : '—'}
                       </td>
                       <td className="px-4 py-3 text-sm hidden md:table-cell">
                         <Badge variant={r.quality_grade === 'A' ? 'success' : r.quality_grade === 'B' ? 'warning' : 'danger'}>
                           {r.quality_grade}
                         </Badge>
                       </td>
+                      {canEdit() && (
+                        <td className="px-4 py-3 text-sm text-right">
+                          <button onClick={() => handleDeleteMilkClick(r.id)} className="text-danger hover:text-danger/80 transition-colors p-1 rounded-md hover:bg-danger/10">
+                            <Trash2 size={16} />
+                          </button>
+                        </td>
+                      )}
                     </tr>
                   ))}
                 </tbody>
@@ -436,7 +445,7 @@ export default function CowDetail() {
         <div className="space-y-4">
           <div>
             <label className="label">Last Period Date</label>
-            <input type="date" value={periodDate} onChange={(e) => setPeriodDate(e.target.value)} className="input-field" max={new Date().toISOString().split('T')[0]} />
+            <DateInput value={periodDate} onChange={(e) => setPeriodDate(e.target.value)} className="input-field" max={new Date().toISOString().split('T')[0]} />
             <p className="text-xs text-farm-text-secondary mt-1">A Smart Alert will automatically trigger 21 days after this date.</p>
           </div>
           <div className="flex justify-end gap-3 pt-2">
@@ -448,6 +457,67 @@ export default function CowDetail() {
           </div>
         </div>
       </Modal>
+ 
+      <Modal isOpen={milkModalOpen} onClose={() => setMilkModalOpen(false)} title={`Add Milk Record for ${cow.name || cow.tag_number}`} size="md">
+        <div className="space-y-4">
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <label className="label">Date *</label>
+              <DateInput value={milkForm.record_date} onChange={e => setMilkForm(f => ({ ...f, record_date: e.target.value }))} className="input-field" />
+            </div>
+            <div>
+              <label className="label">Session *</label>
+              <select value={milkForm.session} onChange={e => setMilkForm(f => ({ ...f, session: e.target.value }))} className="select-field">
+                {MILK_SESSIONS.map(s => <option key={s.value} value={s.value}>{s.label}</option>)}
+              </select>
+            </div>
+          </div>
+
+          <div className="grid grid-cols-3 gap-4">
+            <div>
+              <label className="label">Liters *</label>
+              <input type="number" value={milkForm.quantity_liters} onChange={e => setMilkForm(f => ({ ...f, quantity_liters: e.target.value }))} className="input-field" placeholder="0" step="0.1" />
+            </div>
+            <div>
+              <label className="label">₹ per Liter (Optional)</label>
+              <input type="number" value={milkForm.price_per_liter} onChange={e => setMilkForm(f => ({ ...f, price_per_liter: e.target.value }))} className="input-field" placeholder="Optional" step="0.1" />
+            </div>
+            <div>
+              <label className="label">Quality Grade</label>
+              <select value={milkForm.quality_grade} onChange={e => setMilkForm(f => ({ ...f, quality_grade: e.target.value }))} className="select-field">
+                {QUALITY_GRADES.map(g => <option key={g.value} value={g.value}>{g.label}</option>)}
+              </select>
+            </div>
+          </div>
+
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <label className="label">Fat %</label>
+              <input type="number" value={milkForm.fat_percentage} onChange={e => setMilkForm(f => ({ ...f, fat_percentage: e.target.value }))} className="input-field" placeholder="3.5" step="0.1" />
+            </div>
+            <div>
+              <label className="label">Notes</label>
+              <input value={milkForm.notes} onChange={e => setMilkForm(f => ({ ...f, notes: e.target.value }))} className="input-field" />
+            </div>
+          </div>
+
+          <div className="flex justify-end gap-3 pt-2">
+            <button onClick={() => setMilkModalOpen(false)} className="btn-secondary">Cancel</button>
+            <button onClick={handleSaveMilk} disabled={savingMilk} className="btn-primary flex items-center gap-2">
+              {savingMilk && <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />}
+              Save Record
+            </button>
+          </div>
+        </div>
+      </Modal>
+
+      <ConfirmDialog
+        isOpen={milkDeleteOpen}
+        onClose={() => setMilkDeleteOpen(false)}
+        onConfirm={handleDeleteMilkConfirm}
+        title="Delete Milk Record"
+        message="Are you sure you want to delete this milk record?"
+      />
     </div>
   );
 }

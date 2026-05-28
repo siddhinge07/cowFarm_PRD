@@ -1,10 +1,11 @@
 import { useState, useEffect } from 'react';
-import { supabase } from '../../lib/supabase';
+import { useNavigate } from 'react-router-dom';
+import { api } from '../../lib/api';
 import { useAuth } from '../../contexts/AuthContext';
 import { formatRelativeTime } from '../../utils/helpers';
 import { Badge, EmptyState, PageLoader } from '../../components/common';
 import { toast } from 'react-toastify';
-import { Bell, Check, CheckCheck, Trash2, Activity, HeartPulse, AlertTriangle, Milk, Info } from 'lucide-react';
+import { Bell, Check, CheckCheck, Trash2, Activity, HeartPulse, AlertTriangle, Milk, Info, ArrowLeft } from 'lucide-react';
 
 const typeIcons = {
   estrus_alert: Activity, health_alert: HeartPulse, expense_alert: AlertTriangle,
@@ -12,41 +13,55 @@ const typeIcons = {
 };
 
 export default function NotificationsPage() {
-  const { profile } = useAuth();
+  const navigate = useNavigate();
+  const { user } = useAuth();
   const [notifications, setNotifications] = useState([]);
   const [loading, setLoading] = useState(true);
   const [filter, setFilter] = useState('all');
 
-  useEffect(() => { fetchNotifications(); }, [profile]);
+  useEffect(() => { fetchNotifications(); }, [user]);
 
   const fetchNotifications = async () => {
-    if (!profile) return;
-    const { data } = await supabase
-      .from('notifications')
-      .select('*')
-      .or(`user_id.eq.${profile.id},user_id.is.null`)
-      .order('created_at', { ascending: false })
-      .limit(100);
-    setNotifications(data || []);
-    setLoading(false);
+    if (!user) return;
+    try {
+      const res = await api.get('/notifications', { limit: 100 });
+      setNotifications(res.data || []);
+    } catch (err) {
+      toast.error('Failed to load notifications');
+    } finally {
+      setLoading(false);
+    }
   };
 
   const markAsRead = async (id) => {
-    await supabase.from('notifications').update({ is_read: true }).eq('id', id);
-    setNotifications(prev => prev.map(n => n.id === id ? { ...n, is_read: true } : n));
+    try {
+      await api.put(`/notifications/${id}`, { is_read: true });
+      setNotifications(prev => prev.map(n => n.id === id ? { ...n, is_read: true } : n));
+    } catch (err) {
+      toast.error('Failed to update notification');
+    }
   };
 
   const markAllRead = async () => {
     const ids = notifications.filter(n => !n.is_read).map(n => n.id);
     if (ids.length === 0) return;
-    await supabase.from('notifications').update({ is_read: true }).in('id', ids);
-    setNotifications(prev => prev.map(n => ({ ...n, is_read: true })));
-    toast.success('All notifications marked as read');
+    try {
+      await api.post('/notifications/mark-read', { ids });
+      setNotifications(prev => prev.map(n => ({ ...n, is_read: true })));
+      toast.success('All notifications marked as read');
+    } catch (err) {
+      toast.error('Failed to update notifications');
+    }
   };
 
   const deleteNotification = async (id) => {
-    await supabase.from('notifications').delete().eq('id', id);
-    setNotifications(prev => prev.filter(n => n.id !== id));
+    try {
+      await api.delete(`/notifications/${id}`);
+      setNotifications(prev => prev.filter(n => n.id !== id));
+      toast.success('Notification deleted');
+    } catch (err) {
+      toast.error('Failed to delete notification');
+    }
   };
 
   const filtered = filter === 'all' ? notifications :
@@ -57,6 +72,9 @@ export default function NotificationsPage() {
 
   return (
     <div className="space-y-4">
+      <button onClick={() => navigate('/')} className="btn-ghost text-sm flex items-center gap-1.5 -ml-2 mb-2">
+        <ArrowLeft size={16} /> Back to Dashboard
+      </button>
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-2">
           {['all', 'unread', 'read'].map(f => (
