@@ -2,6 +2,7 @@ const express = require('express');
 const cors = require('cors');
 require('dotenv').config();
 
+const pool = require('./db');
 const initDb = require('./init_db');
 
 const authRoutes = require('./routes/auth');
@@ -21,6 +22,25 @@ app.use(express.json());
 // Public health check
 app.get('/api/health-check', (req, res) => {
   res.json({ status: 'ok', message: 'AgroHerd Backend API is running' });
+});
+
+// Diagnostic DB check
+app.get('/api/test-db', async (req, res) => {
+  try {
+    const [rows] = await pool.query('SHOW TABLES');
+    res.json({ success: true, tables: rows });
+  } catch (err) {
+    res.status(500).json({
+      success: false,
+      error: err.message,
+      code: err.code,
+      host: process.env.DB_HOST,
+      port: process.env.DB_PORT,
+      user: process.env.DB_USER,
+      database: process.env.DB_NAME,
+      ssl: process.env.DB_SSL
+    });
+  }
 });
 
 // Routes
