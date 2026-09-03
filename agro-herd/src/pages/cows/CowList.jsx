@@ -4,8 +4,9 @@ import { api } from '../../lib/api';
 import { useAuth } from '../../contexts/AuthContext';
 import { BREEDS, HEALTH_STATUSES } from '../../constants';
 import { formatDate, calculateAge, downloadCSV } from '../../utils/helpers';
-import { Badge, Pagination, EmptyState, PageLoader } from '../../components/common';
-import { Plus, Search, Filter, Grid3X3, List, Download, Beef, ArrowLeft } from 'lucide-react';
+import { Badge, Pagination, EmptyState, PageLoader, ConfirmDialog } from '../../components/common';
+import { Plus, Search, Filter, Grid3X3, List, Download, Beef, ArrowLeft, Trash2, Edit, Eye } from 'lucide-react';
+import { toast } from 'react-toastify';
 import CowForm from './CowForm';
 
 export default function CowList() {
@@ -16,6 +17,7 @@ export default function CowList() {
   const [loading, setLoading] = useState(true);
   const [viewMode, setViewMode] = useState('table');
   const [activeMainTab, setActiveMainTab] = useState('list');
+  const [cowToDelete, setCowToDelete] = useState(null);
   const [page, setPage] = useState(1);
   const [total, setTotal] = useState(0);
   const [filters, setFilters] = useState({
@@ -87,6 +89,18 @@ export default function CowList() {
       Color: c.color || '—',
     }));
     downloadCSV(exportData, 'cows');
+  };
+
+  const handleDeleteCow = async () => {
+    if (!cowToDelete) return;
+    try {
+      await api.delete(`/cows/${cowToDelete.id}`);
+      toast.success('Cow deleted successfully');
+      setCowToDelete(null);
+      fetchCows();
+    } catch (err) {
+      toast.error(err.message || 'Failed to delete cow');
+    }
   };
 
   const totalPages = Math.ceil(total / limit);
@@ -219,6 +233,7 @@ export default function CowList() {
                   <th className="px-4 py-3 text-left">Status</th>
                   <th className="px-4 py-3 text-left hidden md:table-cell">Milking</th>
                   <th className="px-4 py-3 text-left hidden lg:table-cell">Added</th>
+                  <th className="px-4 py-3 text-right">Actions</th>
                 </tr>
               </thead>
               <tbody>
@@ -243,6 +258,31 @@ export default function CowList() {
                     <td className="px-4 py-3 text-sm hidden lg:table-cell text-farm-text-secondary">
                       {formatDate(cow.created_at)}
                     </td>
+                    <td className="px-4 py-3 text-right" onClick={(e) => e.stopPropagation()}>
+                      <div className="flex items-center justify-end gap-1">
+                        <button
+                          onClick={() => navigate(`/cows/${cow.id}`)}
+                          className="p-1.5 hover:bg-gray-100 rounded-lg text-farm-text-secondary hover:text-brand-primary transition-colors"
+                          title="View Details"
+                        >
+                          <Eye size={16} />
+                        </button>
+                        <button
+                          onClick={() => navigate(`/cows/${cow.id}/edit`)}
+                          className="p-1.5 hover:bg-gray-100 rounded-lg text-farm-text-secondary hover:text-brand-primary transition-colors"
+                          title="Edit Cow"
+                        >
+                          <Edit size={16} />
+                        </button>
+                        <button
+                          onClick={() => setCowToDelete(cow)}
+                          className="p-1.5 hover:bg-red-50 rounded-lg text-farm-text-secondary hover:text-red-600 transition-colors"
+                          title="Delete Cow"
+                        >
+                          <Trash2 size={16} />
+                        </button>
+                      </div>
+                    </td>
                   </tr>
                 ))}
               </tbody>
@@ -255,23 +295,49 @@ export default function CowList() {
             <div
               key={cow.id}
               onClick={() => navigate(`/cows/${cow.id}`)}
-              className="card p-4 cursor-pointer hover:shadow-elevated transition-all animate-fade-in"
+              className="card p-4 cursor-pointer hover:shadow-elevated transition-all animate-fade-in flex flex-col justify-between"
             >
-              <div className="flex items-start justify-between mb-3">
-                <div className="w-12 h-12 rounded-full bg-brand-primary/10 flex items-center justify-center text-xl">
-                  🐄
+              <div>
+                <div className="flex items-start justify-between mb-3">
+                  <div className="w-12 h-12 rounded-full bg-brand-primary/10 flex items-center justify-center text-xl">
+                    🐄
+                  </div>
+                  <Badge variant={cow.health_status}>{cow.health_status}</Badge>
                 </div>
-                <Badge variant={cow.health_status}>{cow.health_status}</Badge>
+                <h4 className="font-heading font-semibold">{cow.name || cow.tag_number}</h4>
+                <p className="text-sm text-farm-text-secondary">Tag: <span className="font-mono">{cow.tag_number}</span></p>
+                <div className="mt-3 flex items-center justify-between text-xs text-farm-text-secondary">
+                  <span>{cow.breed}</span>
+                  <span>{calculateAge(cow.date_of_birth)}</span>
+                </div>
+                {cow.is_milking && (
+                  <div className="mt-2 text-xs text-success font-medium">🥛 Currently milking</div>
+                )}
               </div>
-              <h4 className="font-heading font-semibold">{cow.name || cow.tag_number}</h4>
-              <p className="text-sm text-farm-text-secondary">Tag: <span className="font-mono">{cow.tag_number}</span></p>
-              <div className="mt-3 flex items-center justify-between text-xs text-farm-text-secondary">
-                <span>{cow.breed}</span>
-                <span>{calculateAge(cow.date_of_birth)}</span>
+              <div className="mt-4 pt-3 border-t border-farm-border flex items-center justify-between" onClick={(e) => e.stopPropagation()}>
+                <button
+                  onClick={() => navigate(`/cows/${cow.id}`)}
+                  className="text-xs text-brand-primary hover:underline font-medium"
+                >
+                  View details →
+                </button>
+                <div className="flex items-center gap-1">
+                  <button
+                    onClick={() => navigate(`/cows/${cow.id}/edit`)}
+                    className="p-1.5 hover:bg-gray-100 rounded text-farm-text-secondary hover:text-brand-primary"
+                    title="Edit Cow"
+                  >
+                    <Edit size={14} />
+                  </button>
+                  <button
+                    onClick={() => setCowToDelete(cow)}
+                    className="p-1.5 hover:bg-red-50 rounded text-farm-text-secondary hover:text-red-600"
+                    title="Delete Cow"
+                  >
+                    <Trash2 size={14} />
+                  </button>
+                </div>
               </div>
-              {cow.is_milking && (
-                <div className="mt-2 text-xs text-success font-medium">🥛 Currently milking</div>
-              )}
             </div>
           ))}
         </div>
@@ -280,6 +346,16 @@ export default function CowList() {
       <Pagination page={page} totalPages={totalPages} onPageChange={setPage} />
       </>
       )}
+
+      <ConfirmDialog
+        isOpen={!!cowToDelete}
+        onClose={() => setCowToDelete(null)}
+        onConfirm={handleDeleteCow}
+        title="Delete Cow"
+        message={`Are you sure you want to delete cow "${cowToDelete?.name || cowToDelete?.tag_number}"? This will permanently remove this cow and its records.`}
+        confirmText="Delete Cow"
+        variant="danger"
+      />
     </div>
   );
 }

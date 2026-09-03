@@ -237,7 +237,7 @@ export default function CowDetail() {
                 <Edit size={14} /> Edit
               </button>
             )}
-            {isAdmin() && (
+            {canEdit() && (
               <button onClick={() => setDeleteOpen(true)} className="btn-danger text-sm flex items-center gap-1.5">
                 <Trash2 size={14} /> Delete
               </button>
