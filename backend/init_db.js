@@ -13,7 +13,6 @@ async function initDb() {
       user: process.env.DB_USER || 'root',
       password: process.env.DB_PASSWORD || '',
       ssl: process.env.DB_SSL === 'true' ? { rejectUnauthorized: false } : undefined,
-      multipleStatements: true,
     };
 
     try {
@@ -26,10 +25,28 @@ async function initDb() {
 
     console.log(`Connected to database [${dbName}]. Initializing tables...`);
     const schemaSql = fs.readFileSync(path.join(__dirname, 'mysql_schema.sql'), 'utf8');
-    await connection.query(schemaSql);
-    console.log('Database schema verified/initialized successfully!');
+    
+    // Clean and split SQL into individual executable statements
+    const cleanedSql = schemaSql
+      .split('\n')
+      .filter(line => !line.trim().startsWith('--'))
+      .join('\n');
+
+    const statements = cleanedSql
+      .split(';')
+      .map(s => s.trim())
+      .filter(s => s.length > 0);
+
+    for (const stmt of statements) {
+      await connection.query(stmt);
+    }
+
+    const [tables] = await connection.query('SHOW TABLES');
+    console.log('Database tables verified/initialized:', tables);
+    return { success: true, tables };
   } catch (error) {
-    console.error('Database init notice:', error.message);
+    console.error('Database init notice:', error);
+    return { success: false, error: error.message };
   } finally {
     if (connection) {
       await connection.end();

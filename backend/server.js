@@ -43,6 +43,12 @@ app.get('/api/test-db', async (req, res) => {
   }
 });
 
+// Trigger schema initialization on demand
+app.get('/api/init-db', async (req, res) => {
+  const result = await initDb();
+  res.json(result);
+});
+
 // Routes
 app.use('/api/auth', authRoutes);
 app.use('/api/cows', cowsRoutes);
