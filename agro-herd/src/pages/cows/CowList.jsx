@@ -107,16 +107,14 @@ export default function CowList() {
         >
           Cow List
         </button>
-        {canEdit() && (
-          <button
-            onClick={() => setActiveMainTab('add')}
-            className={`py-3 px-4 font-semibold text-sm transition-all border-b-2 flex items-center gap-2 ${
-              activeMainTab === 'add' ? 'border-brand-primary text-brand-primary' : 'border-transparent text-farm-text-secondary hover:text-brand-primary'
-            }`}
-          >
-            <Plus size={16} /> Add Cow
-          </button>
-        )}
+        <button
+          onClick={() => setActiveMainTab('add')}
+          className={`py-3 px-4 font-semibold text-sm transition-all border-b-2 flex items-center gap-2 ${
+            activeMainTab === 'add' ? 'border-brand-primary text-brand-primary' : 'border-transparent text-farm-text-secondary hover:text-brand-primary'
+          }`}
+        >
+          <Plus size={16} /> Add Cow
+        </button>
       </div>
 
       {activeMainTab === 'add' ? (
@@ -152,11 +150,17 @@ export default function CowList() {
               <Grid3X3 size={16} />
             </button>
           </div>
-            <button onClick={handleExportCSV} className="btn-secondary py-2 px-3 text-sm" title="Export CSV">
-              <Download size={16} />
-            </button>
-          </div>
+          <button onClick={handleExportCSV} className="btn-secondary py-2 px-3 text-sm" title="Export CSV">
+            <Download size={16} />
+          </button>
+          <button
+            onClick={() => setActiveMainTab('add')}
+            className="btn-primary py-2 px-3 text-sm flex items-center gap-1.5 shadow-sm"
+          >
+            <Plus size={16} /> Add Cow
+          </button>
         </div>
+      </div>
 
       {/* Filters */}
       {showFilters && (
@@ -196,7 +200,7 @@ export default function CowList() {
           icon={Beef}
           title="No cows found"
           description={filters.search ? 'Try a different search term' : 'Start by adding your first cow'}
-          action={canEdit() && !filters.search && (
+          action={!filters.search && (
             <button onClick={() => setActiveMainTab('add')} className="btn-primary text-sm">
               <Plus size={16} className="mr-1.5 inline" /> Add First Cow
             </button>

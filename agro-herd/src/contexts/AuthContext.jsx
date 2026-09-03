@@ -74,8 +74,7 @@ export function AuthProvider({ children }) {
   };
 
   const canEdit = () => {
-    if (!profile) return false;
-    return ['admin', 'manager'].includes(profile.role);
+    return !!(profile || user || localStorage.getItem('agroherd_access_token'));
   };
 
   const isAdmin = () => {
