@@ -1,4 +1,4 @@
--- AgroHerd Database Schema for MySQL
+﻿-- AgroHerd Database Schema for MySQL / TiDB
 
 -- 1. USERS
 CREATE TABLE IF NOT EXISTS users (
@@ -33,11 +33,10 @@ CREATE TABLE IF NOT EXISTS cows (
   added_by VARCHAR(36),
   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
   updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  INDEX idx_cows_tag (tag_number),
+  INDEX idx_cows_health (health_status),
   FOREIGN KEY (added_by) REFERENCES users(id) ON DELETE SET NULL
 );
-
-CREATE INDEX idx_cows_tag ON cows(tag_number);
-CREATE INDEX idx_cows_health ON cows(health_status);
 
 -- 3. ESTRUS CYCLES
 CREATE TABLE IF NOT EXISTS estrus_cycles (
@@ -48,11 +47,10 @@ CREATE TABLE IF NOT EXISTS estrus_cycles (
   notes TEXT,
   recorded_by VARCHAR(36),
   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  INDEX idx_cycles_cow (cow_id),
   FOREIGN KEY (cow_id) REFERENCES cows(id) ON DELETE CASCADE,
   FOREIGN KEY (recorded_by) REFERENCES users(id) ON DELETE SET NULL
 );
-
-CREATE INDEX idx_cycles_cow ON estrus_cycles(cow_id);
 
 -- 4. EXPENSES
 CREATE TABLE IF NOT EXISTS expenses (
@@ -68,13 +66,12 @@ CREATE TABLE IF NOT EXISTS expenses (
   added_by VARCHAR(36),
   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
   updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  INDEX idx_expenses_date (expense_date),
+  INDEX idx_expenses_category (category),
+  INDEX idx_expenses_cow (cow_id),
   FOREIGN KEY (cow_id) REFERENCES cows(id) ON DELETE SET NULL,
   FOREIGN KEY (added_by) REFERENCES users(id) ON DELETE SET NULL
 );
-
-CREATE INDEX idx_expenses_date ON expenses(expense_date);
-CREATE INDEX idx_expenses_category ON expenses(category);
-CREATE INDEX idx_expenses_cow ON expenses(cow_id);
 
 -- 5. MILK RECORDS
 CREATE TABLE IF NOT EXISTS milk_records (
@@ -89,13 +86,12 @@ CREATE TABLE IF NOT EXISTS milk_records (
   notes TEXT,
   recorded_by VARCHAR(36),
   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  UNIQUE KEY uniq_cow_date_session (cow_id, record_date, session),
+  INDEX idx_milk_date (record_date),
+  INDEX idx_milk_cow (cow_id),
   FOREIGN KEY (cow_id) REFERENCES cows(id) ON DELETE CASCADE,
-  FOREIGN KEY (recorded_by) REFERENCES users(id) ON DELETE SET NULL,
-  UNIQUE (cow_id, record_date, session)
+  FOREIGN KEY (recorded_by) REFERENCES users(id) ON DELETE SET NULL
 );
-
-CREATE INDEX idx_milk_date ON milk_records(record_date);
-CREATE INDEX idx_milk_cow ON milk_records(cow_id);
 
 -- 6. HEALTH RECORDS
 CREATE TABLE IF NOT EXISTS health_records (
@@ -114,12 +110,11 @@ CREATE TABLE IF NOT EXISTS health_records (
   notes TEXT,
   recorded_by VARCHAR(36),
   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  INDEX idx_health_cow (cow_id),
+  INDEX idx_health_date (record_date),
   FOREIGN KEY (cow_id) REFERENCES cows(id) ON DELETE CASCADE,
   FOREIGN KEY (recorded_by) REFERENCES users(id) ON DELETE SET NULL
 );
-
-CREATE INDEX idx_health_cow ON health_records(cow_id);
-CREATE INDEX idx_health_date ON health_records(record_date);
 
 -- 7. NOTIFICATIONS
 CREATE TABLE IF NOT EXISTS notifications (
@@ -134,9 +129,8 @@ CREATE TABLE IF NOT EXISTS notifications (
   scheduled_for TIMESTAMP NULL,
   sent_at TIMESTAMP NULL,
   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  INDEX idx_notif_user_read (user_id, is_read),
+  INDEX idx_notif_scheduled (scheduled_for),
   FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
   FOREIGN KEY (cow_id) REFERENCES cows(id) ON DELETE SET NULL
 );
-
-CREATE INDEX idx_notif_user_read ON notifications(user_id, is_read);
-CREATE INDEX idx_notif_scheduled ON notifications(scheduled_for);
