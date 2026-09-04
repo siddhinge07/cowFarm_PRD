@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useAuth } from '../../contexts/AuthContext';
 import { useNavigate } from 'react-router-dom';
-import { Beef, Milk, DollarSign, AlertCircle, Activity } from 'lucide-react';
+import { Beef, Milk, DollarSign, AlertCircle, Activity, HeartPulse } from 'lucide-react';
 import { PageLoader, Badge } from '../../components/common';
 import { api } from '../../lib/api';
 import { formatDate } from '../../utils/helpers';
@@ -10,7 +10,7 @@ const PREGNANT_STATUSES = ['pregnant', 'confirmed_pregnancy'];
 
 export default function Dashboard() {
   const navigate = useNavigate();
-  const { loading } = useAuth();
+  const { loading, canViewExpenses, profile } = useAuth();
   const [alerts, setAlerts] = useState([]);
   const [alertsLoading, setAlertsLoading] = useState(true);
 
@@ -65,10 +65,10 @@ export default function Dashboard() {
     <div className="flex flex-col items-center justify-center w-full px-4 py-6">
       <div className="text-center mb-10 animate-fade-in">
         <h1 className="text-4xl md:text-5xl font-heading font-bold text-brand-primary mb-3">
-          Welcome to AgroHerd
+          Welcome to {profile?.farm_name || 'AgroHerd'}
         </h1>
         <p className="text-lg text-farm-text-secondary">
-          Manage your farm efficiently. Select an option below to get started.
+          {profile?.role === 'admin' ? 'Manage your farm efficiently. Select an option below to get started.' : 'Herd Operations Dashboard. Select an option below to log or view records.'}
         </p>
       </div>
 
@@ -76,14 +76,22 @@ export default function Dashboard() {
         <button onClick={() => navigate('/cows')} className="card p-10 bg-brand-primary text-white flex flex-col items-center justify-center gap-4 hover:scale-[1.02] transition-transform cursor-pointer">
           <Beef size={64} />
           <span className="text-xl font-heading font-bold">Track Cows</span>
-          <span className="text-sm opacity-80">Manage herd, add cows, and track health</span>
+          <span className="text-sm opacity-80">Manage herd and view health records</span>
         </button>
         
-        <button onClick={() => navigate('/expenses')} className="card p-10 bg-amber-500 text-white flex flex-col items-center justify-center gap-4 hover:scale-[1.02] transition-transform cursor-pointer">
-          <DollarSign size={64} />
-          <span className="text-xl font-heading font-bold">Expenses</span>
-          <span className="text-sm opacity-80">Add and monitor farm expenditures</span>
-        </button>
+        {canViewExpenses() ? (
+          <button onClick={() => navigate('/expenses')} className="card p-10 bg-amber-500 text-white flex flex-col items-center justify-center gap-4 hover:scale-[1.02] transition-transform cursor-pointer">
+            <DollarSign size={64} />
+            <span className="text-xl font-heading font-bold">Expenses</span>
+            <span className="text-sm opacity-80">Add and monitor farm expenditures</span>
+          </button>
+        ) : (
+          <button onClick={() => navigate('/health')} className="card p-10 bg-emerald-600 text-white flex flex-col items-center justify-center gap-4 hover:scale-[1.02] transition-transform cursor-pointer">
+            <HeartPulse size={64} />
+            <span className="text-xl font-heading font-bold">Health Records</span>
+            <span className="text-sm opacity-80">Log treatments, checkups & vaccines</span>
+          </button>
+        )}
 
         <button onClick={() => navigate('/milk')} className="card p-10 bg-indigo-500 text-white flex flex-col items-center justify-center gap-4 hover:scale-[1.02] transition-transform cursor-pointer">
           <Milk size={64} />

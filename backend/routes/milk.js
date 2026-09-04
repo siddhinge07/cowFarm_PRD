@@ -1,10 +1,10 @@
-const express = require('express');
+﻿const express = require('express');
 const router = express.Router();
 const crypto = require('crypto');
 const pool = require('../db');
 const { verifyToken } = require('../middleware/auth');
 
-// Get milk records
+// Get milk records for current farm
 router.get('/', verifyToken, async (req, res) => {
   try {
     const { cow_id, session, from, to, page = 1, limit = 20 } = req.query;
@@ -12,14 +12,12 @@ router.get('/', verifyToken, async (req, res) => {
 
     let selectQuery = 'SELECT m.*, c.tag_number, c.name FROM milk_records m LEFT JOIN cows c ON m.cow_id = c.id';
     let countQuery = 'SELECT COUNT(*) as total FROM milk_records m';
-    const conditions = [];
-    const params = [];
+    const conditions = ['m.farm_id = ?'];
+    const params = [req.user.farm_id];
 
     if (cow_id) {
       conditions.push('m.cow_id = ?');
       params.push(cow_id);
-    } else {
-      conditions.push('m.cow_id IS NULL');
     }
 
     if (session) {
@@ -37,11 +35,9 @@ router.get('/', verifyToken, async (req, res) => {
       params.push(to);
     }
 
-    if (conditions.length > 0) {
-      const whereClause = ' WHERE ' + conditions.join(' AND ');
-      selectQuery += whereClause;
-      countQuery += whereClause;
-    }
+    const whereClause = ' WHERE ' + conditions.join(' AND ');
+    selectQuery += whereClause;
+    countQuery += whereClause;
 
     selectQuery += ' ORDER BY m.record_date DESC, m.created_at DESC LIMIT ? OFFSET ?';
     const selectParams = [...params, Number(limit), Number(offset)];
@@ -77,14 +73,15 @@ router.post('/', verifyToken, async (req, res) => {
         notes
       } = record;
 
-      const finalCowId = (cow_id && cow_id.trim() !== '') ? cow_id : null;
+      const finalCowId = (cow_id && String(cow_id).trim() !== '') ? cow_id : null;
       const finalPrice = (price_per_liter !== undefined && price_per_liter !== null && String(price_per_liter).trim() !== '') ? parseFloat(price_per_liter) : null;
 
       await pool.query(
-        `INSERT INTO milk_records (id, cow_id, record_date, session, quantity_liters, price_per_liter, quality_grade, fat_percentage, notes, recorded_by) 
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        `INSERT INTO milk_records (id, farm_id, cow_id, record_date, session, quantity_liters, price_per_liter, quality_grade, fat_percentage, notes, recorded_by) 
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
         [
           recordId,
+          req.user.farm_id,
           finalCowId,
           record_date,
           session || 'morning',
@@ -109,7 +106,7 @@ router.post('/', verifyToken, async (req, res) => {
 router.delete('/:id', verifyToken, async (req, res) => {
   try {
     const { id } = req.params;
-    await pool.query('DELETE FROM milk_records WHERE id = ?', [id]);
+    await pool.query('DELETE FROM milk_records WHERE id = ? AND farm_id = ?', [id, req.user.farm_id]);
     res.json({ data: { success: true } });
   } catch (err) {
     console.error(err);

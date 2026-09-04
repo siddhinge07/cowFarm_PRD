@@ -15,6 +15,12 @@ export const formatNumber = (num) => {
 
 export const formatDate = (date) => {
   if (!date) return '—';
+  if (typeof date === 'string' && /^\d{4}-\d{2}-\d{2}/.test(date)) {
+    const parts = date.split('T')[0].split(' ')[0].split('-');
+    if (parts.length === 3) {
+      return `${parts[2]}/${parts[1]}/${parts[0]}`;
+    }
+  }
   const d = new Date(date);
   if (isNaN(d.getTime())) return '—';
   const day = String(d.getDate()).padStart(2, '0');

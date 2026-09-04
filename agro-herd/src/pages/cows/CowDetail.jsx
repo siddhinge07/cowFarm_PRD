@@ -16,7 +16,7 @@ const tabs = ['Overview', 'Milk History', 'Health Records', 'Expenses', 'Cycle H
 export default function CowDetail() {
   const { id } = useParams();
   const navigate = useNavigate();
-  const { canEdit, isAdmin } = useAuth();
+  const { canEdit, canDeleteCow, canViewExpenses } = useAuth();
   const [cow, setCow] = useState(null);
   const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState('Overview');
@@ -227,7 +227,7 @@ export default function CowDetail() {
                 <Milk size={14} /> Add Milk
               </button>
             )}
-            {canEdit() && (
+            {canViewExpenses() && (
               <button onClick={() => navigate(`/expenses?add=true&cow_id=${id}`)} className="btn-warning text-white text-sm flex items-center gap-1.5 shadow-md">
                 <DollarSign size={14} /> Add Expense
               </button>
@@ -237,7 +237,7 @@ export default function CowDetail() {
                 <Edit size={14} /> Edit
               </button>
             )}
-            {canEdit() && (
+            {canDeleteCow() && (
               <button onClick={() => setDeleteOpen(true)} className="btn-danger text-sm flex items-center gap-1.5">
                 <Trash2 size={14} /> Delete
               </button>
@@ -249,7 +249,7 @@ export default function CowDetail() {
       {/* Tabs */}
       <div className="border-b border-farm-border">
         <div className="flex gap-0 overflow-x-auto">
-          {tabs.map(tab => (
+          {tabs.filter(tab => tab !== 'Expenses' || canViewExpenses()).map(tab => (
             <button
               key={tab}
               onClick={() => setActiveTab(tab)}

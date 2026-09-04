@@ -1,17 +1,17 @@
-const express = require('express');
+﻿const express = require('express');
 const router = express.Router();
 const db = require('../db');
 const { verifyToken } = require('../middleware/auth');
 
 router.use(verifyToken);
 
-// Get notifications
+// Get notifications for current farm
 router.get('/', async (req, res) => {
   try {
     const { is_read, limit } = req.query;
     
-    let query = `SELECT n.*, c.tag_number FROM notifications n LEFT JOIN cows c ON n.cow_id = c.id WHERE (n.user_id = ? OR n.user_id IS NULL)`;
-    const params = [req.user.id];
+    let query = `SELECT n.*, c.tag_number FROM notifications n LEFT JOIN cows c ON n.cow_id = c.id WHERE (n.farm_id = ? OR n.farm_id IS NULL) AND (n.user_id = ? OR n.user_id IS NULL)`;
+    const params = [req.user.farm_id, req.user.id];
     
     if (is_read !== undefined) {
       query += ` AND n.is_read = ?`;
@@ -36,8 +36,8 @@ router.get('/', async (req, res) => {
 router.get('/count', async (req, res) => {
   try {
     const [rows] = await db.query(
-      `SELECT COUNT(*) as count FROM notifications WHERE (user_id = ? OR user_id IS NULL) AND is_read = false`,
-      [req.user.id]
+      `SELECT COUNT(*) as count FROM notifications WHERE (farm_id = ? OR farm_id IS NULL) AND (user_id = ? OR user_id IS NULL) AND is_read = false`,
+      [req.user.farm_id, req.user.id]
     );
     res.json({ count: rows[0].count });
   } catch (err) {
@@ -49,7 +49,7 @@ router.get('/count', async (req, res) => {
 router.put('/:id', async (req, res) => {
   try {
     const { is_read } = req.body;
-    await db.query(`UPDATE notifications SET is_read = ? WHERE id = ?`, [is_read, req.params.id]);
+    await db.query(`UPDATE notifications SET is_read = ? WHERE id = ? AND (farm_id = ? OR farm_id IS NULL)`, [is_read, req.params.id, req.user.farm_id]);
     res.json({ success: true });
   } catch (err) {
     res.status(500).json({ error: err.message });
@@ -62,7 +62,7 @@ router.post('/mark-read', async (req, res) => {
     const { ids } = req.body;
     if (!ids || !ids.length) return res.json({ success: true });
     
-    await db.query(`UPDATE notifications SET is_read = true WHERE id IN (?)`, [ids]);
+    await db.query(`UPDATE notifications SET is_read = true WHERE id IN (?) AND (farm_id = ? OR farm_id IS NULL)`, [ids, req.user.farm_id]);
     res.json({ success: true });
   } catch (err) {
     res.status(500).json({ error: err.message });
@@ -72,7 +72,7 @@ router.post('/mark-read', async (req, res) => {
 // Delete notification
 router.delete('/:id', async (req, res) => {
   try {
-    await db.query(`DELETE FROM notifications WHERE id = ?`, [req.params.id]);
+    await db.query(`DELETE FROM notifications WHERE id = ? AND (farm_id = ? OR farm_id IS NULL)`, [req.params.id, req.user.farm_id]);
     res.json({ success: true });
   } catch (err) {
     res.status(500).json({ error: err.message });

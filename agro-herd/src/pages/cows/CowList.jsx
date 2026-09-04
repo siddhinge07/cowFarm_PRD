@@ -12,7 +12,7 @@ import CowForm from './CowForm';
 export default function CowList() {
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
-  const { canEdit } = useAuth();
+  const { canAddCow, canDeleteCow } = useAuth();
   const [cows, setCows] = useState([]);
   const [loading, setLoading] = useState(true);
   const [viewMode, setViewMode] = useState('table');
@@ -121,14 +121,16 @@ export default function CowList() {
         >
           Cow List
         </button>
-        <button
-          onClick={() => setActiveMainTab('add')}
-          className={`py-3 px-4 font-semibold text-sm transition-all border-b-2 flex items-center gap-2 ${
-            activeMainTab === 'add' ? 'border-brand-primary text-brand-primary' : 'border-transparent text-farm-text-secondary hover:text-brand-primary'
-          }`}
-        >
-          <Plus size={16} /> Add Cow
-        </button>
+        {canAddCow() && (
+          <button
+            onClick={() => setActiveMainTab('add')}
+            className={`py-3 px-4 font-semibold text-sm transition-all border-b-2 flex items-center gap-2 ${
+              activeMainTab === 'add' ? 'border-brand-primary text-brand-primary' : 'border-transparent text-farm-text-secondary hover:text-brand-primary'
+            }`}
+          >
+            <Plus size={16} /> Add Cow
+          </button>
+        )}
       </div>
 
       {activeMainTab === 'add' ? (
@@ -167,12 +169,14 @@ export default function CowList() {
           <button onClick={handleExportCSV} className="btn-secondary py-2 px-3 text-sm" title="Export CSV">
             <Download size={16} />
           </button>
-          <button
-            onClick={() => setActiveMainTab('add')}
-            className="btn-primary py-2 px-3 text-sm flex items-center gap-1.5 shadow-sm"
-          >
-            <Plus size={16} /> Add Cow
-          </button>
+          {canAddCow() && (
+            <button
+              onClick={() => setActiveMainTab('add')}
+              className="btn-primary py-2 px-3 text-sm flex items-center gap-1.5 shadow-sm"
+            >
+              <Plus size={16} /> Add Cow
+            </button>
+          )}
         </div>
       </div>
 
@@ -274,13 +278,15 @@ export default function CowList() {
                         >
                           <Edit size={16} />
                         </button>
-                        <button
-                          onClick={() => setCowToDelete(cow)}
-                          className="p-1.5 hover:bg-red-50 rounded-lg text-farm-text-secondary hover:text-red-600 transition-colors"
-                          title="Delete Cow"
-                        >
-                          <Trash2 size={16} />
-                        </button>
+                        {canDeleteCow() && (
+                          <button
+                            onClick={() => setCowToDelete(cow)}
+                            className="p-1.5 hover:bg-red-50 rounded-lg text-farm-text-secondary hover:text-red-600 transition-colors"
+                            title="Delete Cow"
+                          >
+                            <Trash2 size={16} />
+                          </button>
+                        )}
                       </div>
                     </td>
                   </tr>
@@ -329,13 +335,15 @@ export default function CowList() {
                   >
                     <Edit size={14} />
                   </button>
-                  <button
-                    onClick={() => setCowToDelete(cow)}
-                    className="p-1.5 hover:bg-red-50 rounded text-farm-text-secondary hover:text-red-600"
-                    title="Delete Cow"
-                  >
-                    <Trash2 size={14} />
-                  </button>
+                  {canDeleteCow() && (
+                    <button
+                      onClick={() => setCowToDelete(cow)}
+                      className="p-1.5 hover:bg-red-50 rounded text-farm-text-secondary hover:text-red-600"
+                      title="Delete Cow"
+                    >
+                      <Trash2 size={14} />
+                    </button>
+                  )}
                 </div>
               </div>
             </div>

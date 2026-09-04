@@ -157,51 +157,15 @@ export function ConfirmDialog({ isOpen, onClose, onConfirm, title, message, conf
   );
 }
 
-export const DateInput = React.forwardRef(({ className = '', onChange, onBlur, value, defaultValue, ...props }, ref) => {
-  const localRef = useRef(null);
-  const combinedRef = ref || localRef;
-  const [dateStr, setDateStr] = useState('');
-
-  const formatToDisplay = (val) => {
-    if (!val) return 'dd/mm/yyyy';
-    const parts = val.split('-');
-    if (parts.length === 3) {
-      return `${parts[2]}/${parts[1]}/${parts[0]}`;
-    }
-    return val;
-  };
-
-  const updateDateStr = () => {
-    const el = combinedRef.current;
-    if (el) {
-      setDateStr(formatToDisplay(el.value));
-    }
-  };
-
-  useEffect(() => {
-    updateDateStr();
-  });
-
-  const handleChange = (e) => {
-    updateDateStr();
-    if (onChange) onChange(e);
-  };
-
-  const handleBlur = (e) => {
-    updateDateStr();
-    if (onBlur) onBlur(e);
-  };
-
-  const isEmpty = !dateStr || dateStr === 'dd/mm/yyyy';
-
+export const DateInput = React.forwardRef(({ className = '', onChange, value, defaultValue, ...props }, ref) => {
   return (
     <input
       type="date"
-      ref={combinedRef}
-      onChange={handleChange}
-      onBlur={handleBlur}
-      data-date={dateStr}
-      className={`date-input ${isEmpty ? 'date-input-empty' : 'date-input-filled'} ${className}`}
+      ref={ref}
+      value={value !== undefined ? (value || '') : undefined}
+      defaultValue={defaultValue}
+      onChange={onChange}
+      className={`date-input ${className}`}
       {...props}
     />
   );

@@ -12,6 +12,7 @@ const healthRoutes = require('./routes/health');
 const expensesRoutes = require('./routes/expenses');
 const cyclesRoutes = require('./routes/cycles');
 const notificationsRoutes = require('./routes/notifications');
+const teamRoutes = require('./routes/team');
 
 const app = express();
 const port = process.env.PORT || 5000;
@@ -57,6 +58,7 @@ app.use('/api/health', healthRoutes);
 app.use('/api/expenses', expensesRoutes);
 app.use('/api/cycles', cyclesRoutes);
 app.use('/api/notifications', notificationsRoutes);
+app.use('/api/team', teamRoutes);
 
 app.listen(port, async () => {
   console.log(`Server listening on port ${port}`);

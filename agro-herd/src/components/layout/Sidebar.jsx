@@ -32,7 +32,14 @@ const navItems = [
 
 export default function Sidebar({ collapsed, onToggle, mobileOpen, onMobileClose }) {
   const location = useLocation();
-  const { profile, signOut } = useAuth();
+  const { profile, signOut, canViewExpenses } = useAuth();
+
+  const filteredNavItems = navItems.filter(item => {
+    if ((item.path === '/expenses' || item.path === '/reports') && !canViewExpenses()) {
+      return false;
+    }
+    return true;
+  });
 
   return (
     <>
@@ -57,9 +64,14 @@ export default function Sidebar({ collapsed, onToggle, mobileOpen, onMobileClose
           {!collapsed && (
             <div className="flex items-center gap-2">
               <span className="text-2xl">🐄</span>
-              <h1 className="text-white font-heading font-bold text-lg tracking-tight">
-                AgroHerd
-              </h1>
+              <div>
+                <h1 className="text-white font-heading font-bold text-base tracking-tight leading-tight">
+                  {profile?.farm_name || 'AgroHerd'}
+                </h1>
+                {profile?.farm_code && (
+                  <p className="text-emerald-400 font-mono text-[10px] tracking-wider">{profile.farm_code}</p>
+                )}
+              </div>
             </div>
           )}
           {collapsed && <span className="text-2xl mx-auto">🐄</span>}
@@ -78,7 +90,7 @@ export default function Sidebar({ collapsed, onToggle, mobileOpen, onMobileClose
 
         {/* Nav links */}
         <nav className="flex-1 overflow-y-auto py-4 px-3 space-y-1">
-          {navItems.map(({ path, label, icon: Icon }) => (
+          {filteredNavItems.map(({ path, label, icon: Icon }) => (
             <NavLink
               key={path}
               to={path}
@@ -99,7 +111,11 @@ export default function Sidebar({ collapsed, onToggle, mobileOpen, onMobileClose
           {!collapsed && profile && (
             <div className="px-4 py-2 mb-2">
               <p className="text-white text-sm font-medium truncate">{profile.name}</p>
-              <p className="text-white/50 text-xs capitalize">{profile.role}</p>
+              <span className={`inline-block px-2 py-0.5 text-[11px] rounded-full font-medium ${
+                profile.role === 'admin' ? 'bg-amber-400/20 text-amber-300' : 'bg-blue-400/20 text-blue-300'
+              }`}>
+                {profile.role === 'admin' ? '👑 Farm Admin' : '🧑‍🌾 Worker'}
+              </span>
             </div>
           )}
           <button

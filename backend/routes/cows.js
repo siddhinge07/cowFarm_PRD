@@ -1,17 +1,17 @@
-const express = require('express');
+﻿const express = require('express');
 const router = express.Router();
 const crypto = require('crypto');
 const pool = require('../db');
 const { verifyToken } = require('../middleware/auth');
 
-// Get all cows (with pagination, search, filters)
+// Get all cows for current farm
 router.get('/', verifyToken, async (req, res) => {
   try {
     const { page = 1, limit = 20, search, breed, health_status, is_milking } = req.query;
     const offset = (page - 1) * limit;
 
-    let query = 'SELECT * FROM cows WHERE 1=1';
-    const params = [];
+    let query = 'SELECT * FROM cows WHERE farm_id = ?';
+    const params = [req.user.farm_id];
 
     if (search) {
       query += ' AND (tag_number LIKE ? OR name LIKE ?)';
@@ -36,8 +36,8 @@ router.get('/', verifyToken, async (req, res) => {
     const [data] = await pool.query(query, params);
     
     // Count total
-    let countQuery = 'SELECT COUNT(*) as total FROM cows WHERE 1=1';
-    const countParams = [];
+    let countQuery = 'SELECT COUNT(*) as total FROM cows WHERE farm_id = ?';
+    const countParams = [req.user.farm_id];
     if (search) { countQuery += ' AND (tag_number LIKE ? OR name LIKE ?)'; countParams.push(`%${search}%`, `%${search}%`); }
     if (breed) { countQuery += ' AND breed = ?'; countParams.push(breed); }
     if (health_status) { countQuery += ' AND health_status = ?'; countParams.push(health_status); }
@@ -55,7 +55,7 @@ router.get('/', verifyToken, async (req, res) => {
 // Get single cow
 router.get('/:id', verifyToken, async (req, res) => {
   try {
-    const [cows] = await pool.query('SELECT * FROM cows WHERE id = ?', [req.params.id]);
+    const [cows] = await pool.query('SELECT * FROM cows WHERE id = ? AND farm_id = ?', [req.params.id, req.user.farm_id]);
     if (cows.length === 0) return res.status(404).json({ error: 'Cow not found' });
     res.json({ data: cows[0] });
   } catch (err) {
@@ -64,9 +64,13 @@ router.get('/:id', verifyToken, async (req, res) => {
   }
 });
 
-// Create cow
+// Create cow (Admin only)
 router.post('/', verifyToken, async (req, res) => {
   try {
+    if (req.user.role !== 'admin') {
+      return res.status(403).json({ error: 'Only the Farm Admin can add cows.' });
+    }
+
     const cowId = crypto.randomUUID();
     const {
       tag_number, name, breed, date_of_birth, weight_kg, color,
@@ -74,12 +78,12 @@ router.post('/', verifyToken, async (req, res) => {
     } = req.body;
 
     await pool.query(
-      `INSERT INTO cows (id, tag_number, name, breed, date_of_birth, weight_kg, color, health_status, is_milking, purchase_date, purchase_price, notes, added_by) 
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-      [cowId, tag_number, name, breed, date_of_birth, weight_kg, color, health_status, is_milking, purchase_date, purchase_price, notes, req.user.id]
+      `INSERT INTO cows (id, farm_id, tag_number, name, breed, date_of_birth, weight_kg, color, health_status, is_milking, purchase_date, purchase_price, notes, added_by) 
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      [cowId, req.user.farm_id, tag_number, name, breed, date_of_birth, weight_kg, color, health_status, is_milking, purchase_date, purchase_price, notes, req.user.id]
     );
 
-    const [newCow] = await pool.query('SELECT * FROM cows WHERE id = ?', [cowId]);
+    const [newCow] = await pool.query('SELECT * FROM cows WHERE id = ? AND farm_id = ?', [cowId, req.user.farm_id]);
     res.json({ data: newCow[0] });
   } catch (err) {
     console.error(err);
@@ -106,12 +110,16 @@ router.put('/:id', verifyToken, async (req, res) => {
       return res.status(400).json({ error: 'No fields to update' });
     }
 
-    params.push(req.params.id);
+    params.push(req.params.id, req.user.farm_id);
 
-    await pool.query(
-      `UPDATE cows SET ${fields.join(', ')} WHERE id = ?`,
+    const [result] = await pool.query(
+      `UPDATE cows SET ${fields.join(', ')} WHERE id = ? AND farm_id = ?`,
       params
     );
+
+    if (result.affectedRows === 0) {
+      return res.status(404).json({ error: 'Cow not found' });
+    }
 
     res.json({ message: 'Updated successfully' });
   } catch (err) {
@@ -120,10 +128,17 @@ router.put('/:id', verifyToken, async (req, res) => {
   }
 });
 
-// Delete cow
+// Delete cow (Admin only)
 router.delete('/:id', verifyToken, async (req, res) => {
   try {
-    await pool.query('DELETE FROM cows WHERE id = ?', [req.params.id]);
+    if (req.user.role !== 'admin') {
+      return res.status(403).json({ error: 'Only the Farm Admin can delete cows.' });
+    }
+
+    const [result] = await pool.query('DELETE FROM cows WHERE id = ? AND farm_id = ?', [req.params.id, req.user.farm_id]);
+    if (result.affectedRows === 0) {
+      return res.status(404).json({ error: 'Cow not found' });
+    }
     res.json({ message: 'Deleted successfully' });
   } catch (err) {
     console.error(err);

@@ -46,20 +46,38 @@ export function AuthProvider({ children }) {
     }
   };
 
-  const signUp = async (email, password, metadata) => {
-    const { data } = await api.post('/auth/register', { email, password, data: metadata });
-    localStorage.setItem('agroherd_access_token', data.session.access_token);
-    setUser(data.user);
-    setProfile(data.user);
-    return data;
+  const signUp = async (farmName, name, email, password, phone) => {
+    return await api.post('/auth/register', {
+      farm_name: farmName,
+      name,
+      email,
+      password,
+      phone
+    });
+  };
+
+  const verifyOtp = async (email, otp) => {
+    const res = await api.post('/auth/verify-otp', { email, otp });
+    if (res?.data?.session?.access_token) {
+      localStorage.setItem('agroherd_access_token', res.data.session.access_token);
+      setUser(res.data.user);
+      setProfile(res.data.user);
+    }
+    return res;
+  };
+
+  const resendOtp = async (email) => {
+    return await api.post('/auth/resend-otp', { email });
   };
 
   const signIn = async (email, password) => {
-    const { data } = await api.post('/auth/login', { email, password });
-    localStorage.setItem('agroherd_access_token', data.session.access_token);
-    setUser(data.user);
-    setProfile(data.user);
-    return data;
+    const res = await api.post('/auth/login', { email, password });
+    if (res?.data?.session?.access_token) {
+      localStorage.setItem('agroherd_access_token', res.data.session.access_token);
+      setUser(res.data.user);
+      setProfile(res.data.user);
+    }
+    return res;
   };
 
   const signOut = async () => {
@@ -73,14 +91,16 @@ export function AuthProvider({ children }) {
     return roles.includes(profile.role);
   };
 
-  const canEdit = () => {
-    return !!(profile || user || localStorage.getItem('agroherd_access_token'));
-  };
-
-  const isAdmin = () => {
-    if (!profile) return false;
-    return profile.role === 'admin';
-  };
+  const isAdmin = () => profile?.role === 'admin';
+  const isWorker = () => profile?.role === 'worker';
+  const canAddCow = () => profile?.role === 'admin';
+  const canDeleteCow = () => profile?.role === 'admin';
+  const canViewExpenses = () => profile?.role === 'admin';
+  const canManageTeam = () => profile?.role === 'admin';
+  const canRecordCycle = () => true;
+  const canRecordMilk = () => true;
+  const canRecordHealth = () => true;
+  const canEdit = () => true;
 
   const value = {
     user,
@@ -88,11 +108,21 @@ export function AuthProvider({ children }) {
     loading,
     fetchProfile,
     signUp,
+    verifyOtp,
+    resendOtp,
     signIn,
     signOut,
     hasRole,
-    canEdit,
-    isAdmin
+    isAdmin,
+    isWorker,
+    canAddCow,
+    canDeleteCow,
+    canViewExpenses,
+    canManageTeam,
+    canRecordCycle,
+    canRecordMilk,
+    canRecordHealth,
+    canEdit
   };
 
   return (

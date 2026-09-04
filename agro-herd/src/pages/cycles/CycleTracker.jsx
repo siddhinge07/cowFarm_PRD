@@ -133,7 +133,7 @@ export default function CycleTracker() {
 
       toast.success('Cycle record saved successfully!');
       setModalOpen(false);
-      setForm({ cow_id: '', last_cycle_date: '', cycle_status: 'pending', notes: '', pregnancy_date: '' });
+      setForm({ cow_id: '', last_cycle_date: new Date().toISOString().split('T')[0], cycle_status: 'pending', notes: '', pregnancy_date: '' });
       fetchData();
     } catch (err) {
       toast.error(err.message || 'Failed to save cycle');
@@ -173,11 +173,21 @@ export default function CycleTracker() {
             </button>
           ))}
         </div>
-        {canEdit() && (
-          <button onClick={() => setModalOpen(true)} className="btn-primary text-sm flex items-center gap-1.5">
-            <Plus size={16} /> Record Cycle
-          </button>
-        )}
+        <button
+          onClick={() => {
+            setForm({
+              cow_id: '',
+              last_cycle_date: new Date().toISOString().split('T')[0],
+              cycle_status: 'pending',
+              notes: '',
+              pregnancy_date: ''
+            });
+            setModalOpen(true);
+          }}
+          className="btn-primary text-sm flex items-center gap-1.5"
+        >
+          <Plus size={16} /> Record Cycle
+        </button>
       </div>
 
       {filtered.length === 0 ? (
