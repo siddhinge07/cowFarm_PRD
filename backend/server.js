@@ -44,6 +44,32 @@ app.get('/api/test-db', async (req, res) => {
   }
 });
 
+// List all accounts across the entire platform
+app.get('/api/all-accounts', async (req, res) => {
+  try {
+    const [users] = await pool.query(
+      `SELECT u.id, u.name, u.email, u.role, u.is_active, u.is_verified, u.created_at, f.name as farm_name, f.code as farm_code 
+       FROM users u 
+       LEFT JOIN farms f ON u.farm_id = f.id 
+       ORDER BY u.created_at DESC`
+    );
+    res.json({ total: users.length, accounts: users });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Delete any unwanted account by email
+app.delete('/api/all-accounts/:email', async (req, res) => {
+  try {
+    const { email } = req.params;
+    const [result] = await pool.query('DELETE FROM users WHERE email = ?', [email]);
+    res.json({ success: true, message: `Account ${email} deleted successfully.`, affectedRows: result.affectedRows });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 // Trigger schema initialization on demand
 app.get('/api/init-db', async (req, res) => {
   const result = await initDb();

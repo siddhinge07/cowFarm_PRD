@@ -30,6 +30,12 @@ export default function Settings() {
   const [workerToDelete, setWorkerToDelete] = useState(null);
   const [copiedCode, setCopiedCode] = useState(false);
 
+  // All Accounts Directory (Admin only)
+  const [allAccounts, setAllAccounts] = useState([]);
+  const [loadingAllAccounts, setLoadingAllAccounts] = useState(false);
+  const [showAllAccounts, setShowAllAccounts] = useState(false);
+  const [accountToDelete, setAccountToDelete] = useState(null);
+
   useEffect(() => {
     if (profile) {
       setForm({
@@ -40,8 +46,34 @@ export default function Settings() {
     }
     if (isAdmin()) {
       fetchTeam();
+      fetchAllAccounts();
     }
   }, [profile]);
+
+  const fetchAllAccounts = async () => {
+    setLoadingAllAccounts(true);
+    try {
+      const res = await api.get('/all-accounts');
+      setAllAccounts(res.accounts || []);
+    } catch (err) {
+      console.error('Failed to load accounts:', err);
+    } finally {
+      setLoadingAllAccounts(false);
+    }
+  };
+
+  const handleDeleteAnyAccount = async () => {
+    if (!accountToDelete) return;
+    try {
+      await api.delete(`/all-accounts/${encodeURIComponent(accountToDelete.email)}`);
+      toast.success(`Account ${accountToDelete.email} removed permanently!`);
+      setAccountToDelete(null);
+      fetchAllAccounts();
+      fetchTeam();
+    } catch (err) {
+      toast.error('Failed to delete account');
+    }
+  };
 
   const fetchTeam = async () => {
     setLoadingTeam(true);
@@ -263,6 +295,77 @@ export default function Settings() {
         </div>
       )}
 
+      {/* All System Accounts Directory (Admin Only) */}
+      {isAdmin() && (
+        <div className="card p-6 border-t-4 border-t-purple-600">
+          <div className="flex items-center justify-between mb-4">
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 rounded-lg bg-purple-100 text-purple-700 flex items-center justify-center font-bold">
+                👥
+              </div>
+              <div>
+                <h3 className="section-title">All System Accounts ({allAccounts.length})</h3>
+                <p className="text-sm text-farm-text-secondary">View or remove any registered account across the platform</p>
+              </div>
+            </div>
+            <button
+              onClick={fetchAllAccounts}
+              disabled={loadingAllAccounts}
+              className="btn-secondary text-xs py-1.5 px-3"
+            >
+              {loadingAllAccounts ? 'Refreshing...' : '🔄 Refresh List'}
+            </button>
+          </div>
+
+          <div className="overflow-x-auto">
+            <table className="w-full text-left text-sm">
+              <thead>
+                <tr className="border-b border-farm-border text-farm-text-secondary font-medium">
+                  <th className="pb-3 px-2">Name</th>
+                  <th className="pb-3 px-2">Email</th>
+                  <th className="pb-3 px-2">Role</th>
+                  <th className="pb-3 px-2">Farm Name</th>
+                  <th className="pb-3 px-2">Joined</th>
+                  <th className="pb-3 px-2 text-right">Delete Account</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-farm-border/50">
+                {allAccounts.map(acc => (
+                  <tr key={acc.id} className="hover:bg-farm-bg/50">
+                    <td className="py-3 px-2 font-medium text-farm-text-primary">
+                      {acc.name} {acc.id === profile?.id && <span className="text-xs text-brand-primary">(Current)</span>}
+                    </td>
+                    <td className="py-3 px-2 font-mono text-xs text-farm-text-secondary">{acc.email}</td>
+                    <td className="py-3 px-2">
+                      <span className={`inline-block px-2 py-0.5 rounded-full text-xs font-semibold ${
+                        acc.role === 'admin' ? 'bg-amber-100 text-amber-800' : 'bg-blue-100 text-blue-800'
+                      }`}>
+                        {acc.role === 'admin' ? '👑 Admin' : '🧑‍🌾 Worker'}
+                      </span>
+                    </td>
+                    <td className="py-3 px-2 text-xs text-farm-text-primary font-medium">{acc.farm_name || '—'}</td>
+                    <td className="py-3 px-2 text-farm-text-secondary text-xs">{formatDate(acc.created_at)}</td>
+                    <td className="py-3 px-2 text-right">
+                      {acc.id !== profile?.id ? (
+                        <button
+                          onClick={() => setAccountToDelete(acc)}
+                          className="p-1.5 text-red-500 hover:text-red-700 hover:bg-red-50 rounded-lg transition-colors inline-flex items-center gap-1 text-xs"
+                          title="Delete this account permanently"
+                        >
+                          <Trash2 size={14} /> Delete
+                        </button>
+                      ) : (
+                        <span className="text-xs text-gray-400">Active</span>
+                      )}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
+
       {/* Profile Settings */}
       <div className="card p-6">
         <div className="flex items-center gap-3 mb-6">
@@ -396,6 +499,17 @@ export default function Settings() {
         title="Remove Worker"
         message={`Are you sure you want to remove worker "${workerToDelete?.name}" (${workerToDelete?.email})? They will no longer be able to log in to this farm.`}
         confirmText="Remove Worker"
+        variant="danger"
+      />
+
+      {/* Confirm Delete Any Account Dialog */}
+      <ConfirmDialog
+        isOpen={!!accountToDelete}
+        onClose={() => setAccountToDelete(null)}
+        onConfirm={handleDeleteAnyAccount}
+        title="Permanently Delete Account"
+        message={`Are you sure you want to permanently delete account "${accountToDelete?.name}" (${accountToDelete?.email})? This user and their farm access will be completely removed.`}
+        confirmText="Delete Account"
         variant="danger"
       />
     </div>
