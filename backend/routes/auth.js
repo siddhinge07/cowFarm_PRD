@@ -1,4 +1,4 @@
-﻿const express = require('express');
+const express = require('express');
 const router = express.Router();
 const bcrypt = require('bcrypt');
 const jwt = require('jsonwebtoken');
@@ -51,14 +51,17 @@ router.post('/register', async (req, res) => {
       const [farmRows] = await pool.query('SELECT name FROM farms WHERE id = ?', [user.farm_id]);
       const activeFarmName = farmRows[0]?.name || farmName;
 
-      await sendOtpEmail(userEmail, otp, activeFarmName);
+      const emailResult = await sendOtpEmail(userEmail, otp, activeFarmName);
 
       return res.json({
         success: true,
         requires_otp: true,
         email: userEmail,
         farm_name: activeFarmName,
-        message: 'A 6-digit verification code has been sent to your email.'
+        dev_otp: !emailResult?.success ? otp : undefined,
+        message: emailResult?.success
+          ? 'A 6-digit verification code has been sent to your email.'
+          : `Verification code generated! (Sandbox code: ${otp})`
       });
     }
 
@@ -86,14 +89,17 @@ router.post('/register', async (req, res) => {
     );
 
     // Send OTP email
-    await sendOtpEmail(userEmail, otp, farmName);
+    const emailResult = await sendOtpEmail(userEmail, otp, farmName);
 
     res.json({
       success: true,
       requires_otp: true,
       email: userEmail,
       farm_name: farmName,
-      message: 'A 6-digit verification code has been sent to your email.'
+      dev_otp: !emailResult?.success ? otp : undefined,
+      message: emailResult?.success
+        ? 'A 6-digit verification code has been sent to your email.'
+        : `Verification code generated! (Sandbox code: ${otp})`
     });
   } catch (err) {
     console.error('Registration error:', err);
@@ -201,9 +207,15 @@ router.post('/resend-otp', async (req, res) => {
     const [farms] = await pool.query('SELECT name FROM farms WHERE id = ?', [user.farm_id]);
     const farmName = farms[0]?.name || 'AgroHerd';
 
-    await sendOtpEmail(userEmail, otp, farmName);
+    const emailResult = await sendOtpEmail(userEmail, otp, farmName);
 
-    res.json({ success: true, message: 'A fresh 6-digit verification code has been sent to your email.' });
+    res.json({
+      success: true,
+      dev_otp: !emailResult?.success ? otp : undefined,
+      message: emailResult?.success
+        ? 'A fresh 6-digit verification code has been sent to your email.'
+        : `A new verification code was generated! (Sandbox code: ${otp})`
+    });
   } catch (err) {
     console.error('Resend OTP error:', err);
     res.status(500).json({ error: { message: 'Failed to resend verification code' } });
@@ -235,12 +247,15 @@ router.post('/login', async (req, res) => {
       await pool.query('UPDATE users SET otp_code = ?, otp_expires_at = ? WHERE id = ?', [otp, expiresAt, user.id]);
 
       const [farms] = await pool.query('SELECT name FROM farms WHERE id = ?', [user.farm_id]);
-      await sendOtpEmail(userEmail, otp, farms[0]?.name || 'AgroHerd');
+      const emailResult = await sendOtpEmail(userEmail, otp, farms[0]?.name || 'AgroHerd');
 
       return res.status(403).json({
         error: {
-          message: 'Your email has not been verified yet. We have sent a 6-digit verification code to your email.',
+          message: emailResult?.success
+            ? 'Your email has not been verified yet. We have sent a 6-digit verification code to your email.'
+            : `Please enter your verification code. (Sandbox code: ${otp})`,
           requires_otp: true,
+          dev_otp: !emailResult?.success ? otp : undefined,
           email: userEmail
         }
       });

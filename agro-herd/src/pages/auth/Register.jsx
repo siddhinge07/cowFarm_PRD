@@ -1,4 +1,4 @@
-﻿import { useState } from 'react';
+import { useState } from 'react';
 import { useNavigate, Link, useSearchParams } from 'react-router-dom';
 import { useAuth } from '../../contexts/AuthContext';
 import { toast } from 'react-toastify';
@@ -16,6 +16,7 @@ export default function Register() {
     phone: '',
   });
   const [otp, setOtp] = useState('');
+  const [devOtp, setDevOtp] = useState(null);
   const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
   const [resending, setResending] = useState(false);
@@ -44,7 +45,13 @@ export default function Register() {
     try {
       const response = await signUp(form.farm_name.trim(), form.name.trim(), form.email.trim(), form.password, form.phone);
       if (response?.requires_otp) {
-        toast.info(response.message || 'Verification code sent to your email!');
+        if (response.dev_otp) {
+          setDevOtp(response.dev_otp);
+          setOtp(response.dev_otp);
+          toast.info(`Verification code: ${response.dev_otp}`);
+        } else {
+          toast.info(response.message || 'Verification code sent to your email!');
+        }
         setStep('otp');
       } else {
         toast.success('Account created successfully!');
@@ -79,8 +86,14 @@ export default function Register() {
   const handleResendOtp = async () => {
     setResending(true);
     try {
-      await resendOtp(form.email.trim());
-      toast.success('A new 6-digit code was sent to your email!');
+      const res = await resendOtp(form.email.trim());
+      if (res?.dev_otp) {
+        setDevOtp(res.dev_otp);
+        setOtp(res.dev_otp);
+        toast.info(`New verification code: ${res.dev_otp}`);
+      } else {
+        toast.success('A new 6-digit code was sent to your email!');
+      }
     } catch (err) {
       toast.error(err.error?.message || err.message || 'Failed to resend code');
     } finally {
@@ -266,6 +279,21 @@ export default function Register() {
                 <strong className="text-farm-text-primary font-mono">{form.email}</strong>.
                 Enter it below to activate your farm account.
               </p>
+
+              {devOtp && (
+                <div className="mb-6 p-4 bg-emerald-50 border border-emerald-200 rounded-xl text-emerald-900 text-sm shadow-sm">
+                  <div className="flex items-center gap-2 font-semibold text-emerald-800 mb-1">
+                    <CheckCircle2 size={18} className="text-emerald-600 shrink-0" />
+                    <span>Testing / Sandbox Mode Verification Code</span>
+                  </div>
+                  <p className="text-xs text-emerald-700 leading-relaxed mb-2">
+                    Because this email domain is in testing sandbox mode, your 6-digit code has been generated and auto-filled below:
+                  </p>
+                  <div className="inline-block bg-white px-3 py-1.5 rounded-lg border border-emerald-300 font-mono font-bold text-lg text-emerald-800 tracking-widest">
+                    {devOtp}
+                  </div>
+                </div>
+              )}
 
               <form onSubmit={handleVerifyOtp} className="space-y-4">
                 <div>

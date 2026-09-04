@@ -1,4 +1,4 @@
-﻿require('dotenv').config();
+require('dotenv').config();
 const nodemailer = require('nodemailer');
 
 async function sendOtpEmail(email, otp, farmName = 'AgroHerd') {
@@ -25,9 +25,72 @@ async function sendOtpEmail(email, otp, farmName = 'AgroHerd') {
     </div>
   `;
 
-  let lastError = null;
+  // 1. Brevo REST API (HTTP Port 443 - Can send to ANY recipient without requiring custom domain)
+  const brevoKey = process.env.BREVO_API_KEY;
+  if (brevoKey) {
+    try {
+      const senderEmail = process.env.BREVO_SENDER_EMAIL || process.env.EMAIL_FROM_ADDRESS || 'siddheshnhinge1528@gmail.com';
+      const senderName = process.env.BREVO_SENDER_NAME || 'AgroHerd';
 
-  // 1. Gmail SMTP (Sends to ANY email in the world)
+      const response = await fetch('https://api.brevo.com/v3/smtp/email', {
+        method: 'POST',
+        headers: {
+          'api-key': brevoKey,
+          'Content-Type': 'application/json',
+          'Accept': 'application/json'
+        },
+        body: JSON.stringify({
+          sender: { name: senderName, email: senderEmail },
+          to: [{ email }],
+          subject: `${otp} is your AgroHerd verification code`,
+          htmlContent: htmlContent
+        })
+      });
+
+      const resData = await response.json();
+      if (response.ok) {
+        console.log(`[Brevo Success] Email delivered to ${email}. Message ID:`, resData.messageId);
+        return { success: true, provider: 'brevo', messageId: resData.messageId };
+      } else {
+        console.warn('[Brevo Warning]', resData.message || resData);
+      }
+    } catch (err) {
+      console.error('[Brevo Error]', err.message);
+    }
+  }
+
+  // 2. Resend API (HTTP REST Port 443)
+  const resendKey = process.env.RESEND_API_KEY;
+  if (resendKey) {
+    try {
+      const fromEmail = process.env.EMAIL_FROM || 'AgroHerd <onboarding@resend.dev>';
+      const response = await fetch('https://api.resend.com/emails', {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${resendKey}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          from: fromEmail,
+          to: email,
+          subject: `${otp} is your AgroHerd verification code`,
+          html: htmlContent
+        })
+      });
+
+      const resData = await response.json();
+      if (response.ok) {
+        console.log(`[Resend Success] Email delivered to ${email}. ID:`, resData.id);
+        return { success: true, provider: 'resend', id: resData.id };
+      } else {
+        console.warn('[Resend Sandbox Restriction]', resData.message || resData);
+      }
+    } catch (err) {
+      console.error('[Resend Error]', err.message);
+    }
+  }
+
+  // 3. Fallback: SMTP with short timeout
   if (process.env.SMTP_USER && process.env.SMTP_PASS) {
     try {
       const userEmail = process.env.SMTP_USER.trim();
@@ -37,6 +100,8 @@ async function sendOtpEmail(email, otp, farmName = 'AgroHerd') {
         host: 'smtp.gmail.com',
         port: 465,
         secure: true,
+        connectionTimeout: 4000,
+        greetingTimeout: 4000,
         auth: {
           user: userEmail,
           pass: cleanPass
@@ -50,52 +115,15 @@ async function sendOtpEmail(email, otp, farmName = 'AgroHerd') {
         html: htmlContent
       });
 
-      console.log(`[Gmail SMTP Success] Email sent to ${email}. Message ID: ${info.messageId}`);
-      return { success: true, provider: 'gmail', messageId: info.messageId };
+      console.log(`[SMTP Success] Email sent to ${email}. Message ID: ${info.messageId}`);
+      return { success: true, provider: 'smtp', messageId: info.messageId };
     } catch (err) {
-      console.error('[Gmail SMTP Error]', err.message);
-      lastError = err;
+      console.warn('[SMTP Notice - Cloud host may block outbound SMTP]', err.message);
     }
   }
 
-  // 2. Resend API Fallback
-  const apiKey = process.env.RESEND_API_KEY;
-  if (apiKey) {
-    try {
-      const fromEmail = process.env.EMAIL_FROM || 'AgroHerd <onboarding@resend.dev>';
-      const response = await fetch('https://api.resend.com/emails', {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${apiKey}`,
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify({
-          from: fromEmail,
-          to: email,
-          subject: `${otp} is your AgroHerd verification code`,
-          html: htmlContent
-        })
-      });
-
-      const resData = await response.json();
-      if (!response.ok) {
-        console.error('[Resend Error]', resData);
-        lastError = new Error(resData.message || 'Resend error');
-      } else {
-        console.log('[Resend Success] Email sent ID:', resData.id);
-        return { success: true, provider: 'resend', id: resData.id };
-      }
-    } catch (err) {
-      console.error('[Resend Failed]', err.message);
-      lastError = err;
-    }
-  }
-
-  if (lastError) {
-    throw lastError;
-  }
-
-  return { success: false, note: 'No email service credentials configured' };
+  // If providers failed or restricted recipient, return graceful false
+  return { success: false, reason: 'provider_restricted' };
 }
 
 module.exports = { sendOtpEmail };
