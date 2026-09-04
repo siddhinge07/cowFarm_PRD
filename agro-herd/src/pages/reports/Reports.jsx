@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { api } from '../../lib/api';
 import { formatCurrency, formatNumber, getDateRange, downloadCSV, formatDate } from '../../utils/helpers';
+import { downloadOverallHistoryCSV } from '../../utils/backupService';
 import { PageLoader } from '../../components/common';
 import { Download, BarChart3, TrendingUp, DollarSign, Milk, ArrowLeft } from 'lucide-react';
 import { toast } from 'react-toastify';
@@ -47,11 +48,25 @@ export default function Reports() {
     })), 'milk_report');
   };
 
+  const [exportingOverall, setExportingOverall] = useState(false);
+
   const exportExpenseCSV = () => {
     downloadCSV(data.expenseRecords.map(e => ({
       Date: formatDate(e.expense_date), Category: e.category, 'Sub-category': e.sub_category || '',
       Amount: e.amount, Cow: e.cows?.tag_number || e.cow_id || 'Farm-wide', Vendor: e.vendor || '',
     })), 'expense_report');
+  };
+
+  const handleDownloadOverall = async () => {
+    setExportingOverall(true);
+    try {
+      const count = await downloadOverallHistoryCSV(api);
+      toast.success(`Exported entire farm history (${count} records) successfully!`);
+    } catch (err) {
+      toast.error('Failed to export overall history');
+    } finally {
+      setExportingOverall(false);
+    }
   };
 
   const profitMargin = data.income > 0 ? ((data.profit / data.income) * 100).toFixed(1) : 0;
@@ -61,26 +76,42 @@ export default function Reports() {
       <button onClick={() => navigate('/')} className="btn-ghost text-sm flex items-center gap-1.5 -ml-2 mb-2">
         <ArrowLeft size={16} /> Back to Dashboard
       </button>
-      {/* Period Selector */}
-      <div className="flex items-center gap-2 flex-wrap">
-        {[
-          { value: 'today', label: 'Today' },
-          { value: '7d', label: '7 Days' },
-          { value: '15d', label: '15 Days' },
-          { value: 'month', label: 'This Month' },
-          { value: 'quarter', label: 'This Quarter' },
-          { value: 'year', label: 'This Year' },
-        ].map(p => (
-          <button
-            key={p.value}
-            onClick={() => setPeriod(p.value)}
-            className={`px-4 py-2 text-sm rounded-lg transition-colors ${
-              period === p.value ? 'bg-brand-primary text-white' : 'bg-white border border-farm-border text-farm-text-secondary hover:bg-gray-50'
-            }`}
-          >
-            {p.label}
-          </button>
-        ))}
+      {/* Period Selector & 1-Click Overall History Download */}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+        <div className="flex items-center gap-2 flex-wrap">
+          {[
+            { value: 'today', label: 'Today' },
+            { value: '7d', label: '7 Days' },
+            { value: '15d', label: '15 Days' },
+            { value: 'month', label: 'This Month' },
+            { value: 'quarter', label: 'This Quarter' },
+            { value: 'year', label: 'This Year' },
+          ].map(p => (
+            <button
+              key={p.value}
+              onClick={() => setPeriod(p.value)}
+              className={`px-4 py-2 text-sm rounded-lg transition-colors ${
+                period === p.value ? 'bg-brand-primary text-white' : 'bg-white border border-farm-border text-farm-text-secondary hover:bg-gray-50'
+              }`}
+            >
+              {p.label}
+            </button>
+          ))}
+        </div>
+
+        <button
+          onClick={handleDownloadOverall}
+          disabled={exportingOverall}
+          className="btn-primary text-sm py-2 px-4 flex items-center justify-center gap-2 self-start sm:self-auto shadow-sm"
+          title="Download complete timeline of all cycles, milk records, expenses, and health logs in one click"
+        >
+          {exportingOverall ? (
+            <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+          ) : (
+            <Download size={16} />
+          )}
+          <span>{exportingOverall ? 'Exporting History...' : 'Download Overall History (CSV)'}</span>
+        </button>
       </div>
 
       {loading ? <PageLoader /> : (

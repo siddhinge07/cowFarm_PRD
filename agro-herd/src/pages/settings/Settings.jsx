@@ -4,8 +4,9 @@ import { useAuth } from '../../contexts/AuthContext';
 import { api } from '../../lib/api';
 import { toast } from 'react-toastify';
 import { formatDate } from '../../utils/helpers';
+import { downloadOverallHistoryCSV, downloadFullBackupJSON } from '../../utils/backupService';
 import { ConfirmDialog, Modal } from '../../components/common';
-import { Save, User, Shield, ArrowLeft, Building2, Users, UserPlus, Trash2, Copy, Check } from 'lucide-react';
+import { Save, User, Shield, ArrowLeft, Building2, Users, UserPlus, Trash2, Copy, Check, Download } from 'lucide-react';
 
 export default function Settings() {
   const navigate = useNavigate();
@@ -125,6 +126,33 @@ export default function Settings() {
     }
   };
 
+  const [exportingCSV, setExportingCSV] = useState(false);
+  const [exportingJSON, setExportingJSON] = useState(false);
+
+  const handleDownloadOverallCSV = async () => {
+    setExportingCSV(true);
+    try {
+      const count = await downloadOverallHistoryCSV(api);
+      toast.success(`Exported complete farm history (${count} records) to CSV!`);
+    } catch (err) {
+      toast.error('Failed to export overall history');
+    } finally {
+      setExportingCSV(false);
+    }
+  };
+
+  const handleDownloadFullJSON = async () => {
+    setExportingJSON(true);
+    try {
+      const counts = await downloadFullBackupJSON(api);
+      toast.success(`Exported complete database backup (${counts.total_cycles} cycles, ${counts.total_cows} cows, ${counts.total_milk_records} milk logs)!`);
+    } catch (err) {
+      toast.error('Failed to export database backup');
+    } finally {
+      setExportingJSON(false);
+    }
+  };
+
   const handleAddWorker = async (e) => {
     e.preventDefault();
     if (!workerForm.name.trim() || !workerForm.email.trim() || !workerForm.password) {
@@ -220,6 +248,71 @@ export default function Settings() {
           </div>
         </div>
       )}
+
+      {/* Farm Data Backup & Export (1-Click) */}
+      <div className="card p-6">
+        <div className="flex items-center gap-3 mb-6">
+          <div className="w-10 h-10 rounded-lg bg-emerald-100 text-brand-primary flex items-center justify-center">
+            <Download size={22} />
+          </div>
+          <div>
+            <h3 className="section-title">Farm Data Backup & Export</h3>
+            <p className="text-sm text-farm-text-secondary">Download and preserve offline copies of your farm history in 1 click</p>
+          </div>
+        </div>
+
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          {/* 1-Click Master History CSV */}
+          <div className="p-4 rounded-xl border border-farm-border bg-farm-bg/50 flex flex-col justify-between">
+            <div>
+              <h4 className="font-semibold text-farm-text-primary text-sm flex items-center gap-2 mb-1">
+                <span>📊 Overall Farm History (CSV)</span>
+              </h4>
+              <p className="text-xs text-farm-text-secondary mb-4 leading-relaxed">
+                A single comprehensive spreadsheet containing all cow cycles, inseminations, daily milk records, veterinary treatments, and farm expenses.
+              </p>
+            </div>
+            <button
+              onClick={handleDownloadOverallCSV}
+              disabled={exportingCSV}
+              className="btn-primary text-sm flex items-center justify-center gap-2 w-full py-2.5 shadow-sm"
+              title="Download entire farm timeline to Excel/CSV"
+            >
+              {exportingCSV ? (
+                <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+              ) : (
+                <Download size={15} />
+              )}
+              <span>{exportingCSV ? 'Preparing History...' : 'Download Overall History (CSV)'}</span>
+            </button>
+          </div>
+
+          {/* 1-Click Complete Backup JSON */}
+          <div className="p-4 rounded-xl border border-farm-border bg-farm-bg/50 flex flex-col justify-between">
+            <div>
+              <h4 className="font-semibold text-farm-text-primary text-sm flex items-center gap-2 mb-1">
+                <span>📦 Complete Database Backup (JSON)</span>
+              </h4>
+              <p className="text-xs text-farm-text-secondary mb-4 leading-relaxed">
+                Raw structured database backup with all cows, cycles, milk sessions, medical logs, and expense tables for archival and data safety.
+              </p>
+            </div>
+            <button
+              onClick={handleDownloadFullJSON}
+              disabled={exportingJSON}
+              className="btn-secondary text-sm flex items-center justify-center gap-2 w-full py-2.5"
+              title="Download complete raw database snapshot in JSON"
+            >
+              {exportingJSON ? (
+                <div className="w-4 h-4 border-2 border-gray-400 border-t-gray-700 rounded-full animate-spin" />
+              ) : (
+                <Download size={15} />
+              )}
+              <span>{exportingJSON ? 'Exporting Tables...' : 'Download Full Backup (JSON)'}</span>
+            </button>
+          </div>
+        </div>
+      </div>
 
       {/* Farm Team / Workers (Admin Only) */}
       {isAdmin() && (

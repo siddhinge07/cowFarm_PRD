@@ -135,3 +135,14 @@ export const downloadCSV = (data, filename) => {
   link.click();
   URL.revokeObjectURL(link.href);
 };
+
+export const downloadJSON = (data, filename) => {
+  if (!data) return;
+  const jsonStr = JSON.stringify(data, null, 2);
+  const blob = new Blob([jsonStr], { type: 'application/json;charset=utf-8;' });
+  const link = document.createElement('a');
+  link.href = URL.createObjectURL(blob);
+  link.download = `${filename}_${new Date().toISOString().split('T')[0]}.json`;
+  link.click();
+  URL.revokeObjectURL(link.href);
+};
