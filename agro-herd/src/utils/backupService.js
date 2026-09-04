@@ -102,6 +102,7 @@ export async function downloadOverallHistoryCSV(api) {
   const finalData = timeline.map(({ dateRaw, ...rest }) => rest);
 
   downloadCSV(finalData, 'farm_overall_history_backup');
+  recordBackupCompleted();
   return finalData.length;
 }
 
@@ -139,5 +140,38 @@ export async function downloadFullBackupJSON(api) {
   };
 
   downloadJSON(fullBackup, 'agroherd_complete_farm_backup');
+  recordBackupCompleted();
   return fullBackup.counts;
+}
+
+export function recordBackupCompleted() {
+  localStorage.setItem('agroherd_last_backup_date', new Date().toISOString());
+  localStorage.removeItem('agroherd_backup_dismissed_until');
+}
+
+export function getLastBackupDate() {
+  return localStorage.getItem('agroherd_last_backup_date');
+}
+
+export function getDaysSinceLastBackup() {
+  const last = localStorage.getItem('agroherd_last_backup_date');
+  if (!last) return null; // Never backed up
+  const d = new Date(last);
+  if (isNaN(d.getTime())) return null;
+  const diffMs = new Date() - d;
+  return Math.floor(diffMs / (1000 * 60 * 60 * 24));
+}
+
+export function isBackupDue() {
+  const dismissedUntil = localStorage.getItem('agroherd_backup_dismissed_until');
+  if (dismissedUntil && dismissedUntil === new Date().toDateString()) {
+    return false;
+  }
+  const days = getDaysSinceLastBackup();
+  // If never backed up, or >= 7 days
+  return days === null || days >= 7;
+}
+
+export function dismissBackupForToday() {
+  localStorage.setItem('agroherd_backup_dismissed_until', new Date().toDateString());
 }

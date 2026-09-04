@@ -2,7 +2,9 @@ import { useState, useEffect } from 'react';
 import { api } from '../../lib/api';
 import { useAuth } from '../../contexts/AuthContext';
 import { formatRelativeTime } from '../../utils/helpers';
-import { Bell, Check, CheckCheck, X, AlertTriangle, HeartPulse, Milk, Activity, Info } from 'lucide-react';
+import { Bell, Check, CheckCheck, X, AlertTriangle, HeartPulse, Milk, Activity, Info, Download } from 'lucide-react';
+import { isBackupDue, downloadOverallHistoryCSV } from '../../utils/backupService';
+import { toast } from 'react-toastify';
 
 const typeIcons = {
   estrus_alert: Activity,
@@ -38,6 +40,22 @@ export default function NotificationPanel({ onClose, onUpdate }) {
       console.error(err);
     } finally {
       setLoading(false);
+    }
+  };
+
+  const [downloadingBackup, setDownloadingBackup] = useState(false);
+
+  const handleDownloadBackupFromNotif = async () => {
+    setDownloadingBackup(true);
+    try {
+      const count = await downloadOverallHistoryCSV(api);
+      toast.success(`Weekly backup downloaded (${count} records)! Next reminder in 7 days.`);
+      onUpdate?.();
+      onClose?.();
+    } catch (err) {
+      toast.error('Failed to download backup');
+    } finally {
+      setDownloadingBackup(false);
     }
   };
 
@@ -80,9 +98,39 @@ export default function NotificationPanel({ onClose, onUpdate }) {
         </div>
       </div>
       <div className="overflow-y-auto max-h-[420px]">
+        {/* 7-Day Backup Reminder */}
+        {isBackupDue() && (
+          <div className="p-3.5 bg-gradient-to-r from-emerald-50 to-teal-50 border-b border-emerald-200 flex items-start gap-3">
+            <div className="p-2 rounded-lg bg-emerald-100 text-brand-primary shrink-0 mt-0.5 shadow-sm">
+              <Download size={16} />
+            </div>
+            <div className="flex-1 min-w-0">
+              <div className="flex items-center justify-between gap-1">
+                <p className="text-xs font-bold text-emerald-950">Weekly Backup Due</p>
+                <span className="text-[10px] bg-emerald-200 text-emerald-900 font-bold px-1.5 py-0.5 rounded-full">Every 7 Days</span>
+              </div>
+              <p className="text-xs text-emerald-800 mt-0.5 leading-relaxed">
+                Save an offline backup to protect your herd, milk & cycle data.
+              </p>
+              <button
+                onClick={handleDownloadBackupFromNotif}
+                disabled={downloadingBackup}
+                className="mt-2 text-xs bg-brand-primary hover:bg-brand-primary-dark text-white font-semibold px-3 py-1 rounded-lg shadow-sm transition-colors flex items-center gap-1.5 cursor-pointer"
+              >
+                {downloadingBackup ? (
+                  <div className="w-3 h-3 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                ) : (
+                  <Download size={12} />
+                )}
+                <span>{downloadingBackup ? 'Downloading...' : 'Download Backup Now'}</span>
+              </button>
+            </div>
+          </div>
+        )}
+
         {loading ? (
           <div className="p-8 text-center text-farm-text-secondary text-sm">Loading...</div>
-        ) : notifications.length === 0 ? (
+        ) : notifications.length === 0 && !isBackupDue() ? (
           <div className="p-8 text-center">
             <Bell size={32} className="mx-auto text-farm-text-secondary/30 mb-2" />
             <p className="text-farm-text-secondary text-sm">No notifications yet</p>

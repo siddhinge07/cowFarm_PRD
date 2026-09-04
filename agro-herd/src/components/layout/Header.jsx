@@ -4,6 +4,7 @@ import { useState, useEffect } from 'react';
 import { api } from '../../lib/api';
 import { useNavigate, useLocation } from 'react-router-dom';
 import NotificationPanel from '../notifications/NotificationPanel';
+import { isBackupDue } from '../../utils/backupService';
 
 const pageTitles = {
   '/': 'Dashboard',
@@ -36,7 +37,8 @@ export default function Header({ onMenuClick }) {
     if (!user) return;
     try {
       const res = await api.get('/notifications/count');
-      setUnreadCount(res.count || 0);
+      const backupDue = isBackupDue() ? 1 : 0;
+      setUnreadCount((res.count || 0) + backupDue);
     } catch (error) {
       console.error(error);
     }
