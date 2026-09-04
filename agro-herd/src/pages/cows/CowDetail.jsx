@@ -2,13 +2,13 @@ import { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { api } from '../../lib/api';
 import { useAuth } from '../../contexts/AuthContext';
-import { formatDate, formatCurrency, calculateAge } from '../../utils/helpers';
+import { formatDate, formatDateTime, formatCurrency, calculateAge, downloadCSV } from '../../utils/helpers';
 import { Badge, PageLoader, ConfirmDialog, Modal, DateInput } from '../../components/common';
 import { toast } from 'react-toastify';
 import { MILK_SESSIONS, QUALITY_GRADES } from '../../constants';
 import {
   ArrowLeft, Edit, Trash2, Milk, DollarSign, HeartPulse, Activity,
-  Calendar, Weight, Tag, Heart
+  Calendar, Weight, Tag, Heart, Download
 } from 'lucide-react';
 
 const tabs = ['Overview', 'Milk History', 'Health Records', 'Expenses', 'Cycle History'];
@@ -117,6 +117,28 @@ export default function CowDetail() {
     } catch(err) {
       toast.error('Failed to delete');
     }
+  };
+
+  const exportCowCyclesCSV = () => {
+    if (!tabData || tabData.length === 0) {
+      toast.info('No cycle records for this cow');
+      return;
+    }
+    const exportData = tabData.map(r => {
+      const nextDate = new Date(r.last_cycle_date);
+      nextDate.setDate(nextDate.getDate() + 21);
+      return {
+        'Cow Tag': cow?.tag_number || '—',
+        'Cow Name': cow?.name || '—',
+        'Last Cycle Date': formatDate(r.last_cycle_date),
+        'Cycle Status': r.cycle_status ? String(r.cycle_status).replace(/_/g, ' ') : '—',
+        'Next Expected Date': formatDate(nextDate),
+        'Notes': r.notes || '—',
+        'Recorded On': formatDateTime(r.created_at || r.last_cycle_date)
+      };
+    });
+    downloadCSV(exportData, `cycles_${cow?.tag_number || 'cow'}_backup`);
+    toast.success(`Exported ${exportData.length} records for ${cow?.tag_number || 'cow'}!`);
   };
 
   const handleSavePeriod = async () => {
@@ -398,6 +420,20 @@ export default function CowDetail() {
 
         {activeTab === 'Cycle History' && (
           <div className="card overflow-hidden">
+            <div className="p-4 border-b border-farm-border flex items-center justify-between flex-wrap gap-2">
+              <h3 className="section-title text-base font-semibold">
+                Cycle History {tabData.length > 0 && `(${tabData.length} records)`}
+              </h3>
+              {tabData.length > 0 && (
+                <button
+                  onClick={exportCowCyclesCSV}
+                  className="btn-secondary text-xs sm:text-sm py-1.5 px-3 flex items-center gap-1.5"
+                  title="Download CSV backup of this cow's cycle records"
+                >
+                  <Download size={14} /> Backup This Cow's Cycles (CSV)
+                </button>
+              )}
+            </div>
             {tabLoading ? <div className="p-8 text-center text-farm-text-secondary">Loading...</div> :
             tabData.length === 0 ? <div className="p-8 text-center text-farm-text-secondary text-sm">No cycle records</div> : (
               <table className="w-full">

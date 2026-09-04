@@ -3,10 +3,10 @@ import { useNavigate } from 'react-router-dom';
 import { api } from '../../lib/api';
 import { useAuth } from '../../contexts/AuthContext';
 import { CYCLE_STATUSES } from '../../constants';
-import { formatDate } from '../../utils/helpers';
+import { formatDate, formatDateTime, downloadCSV } from '../../utils/helpers';
 import { Badge, Modal, EmptyState, PageLoader, DateInput, ConfirmDialog } from '../../components/common';
 import { toast } from 'react-toastify';
-import { Plus, Activity, AlertCircle, ArrowLeft, Trash } from 'lucide-react';
+import { Plus, Activity, AlertCircle, ArrowLeft, Trash, Download } from 'lucide-react';
 
 const ACTIONED_STATUSES = ['observed', 'pregnancy_attempt', 'given_medicine', 'failed', 'missed'];
 const PREGNANT_STATUSES = ['pregnant', 'confirmed_pregnancy'];
@@ -127,6 +127,27 @@ export default function CycleTracker() {
       return nextA - nextB;
     });
 
+  const exportAllCyclesCSV = () => {
+    if (!cycles || cycles.length === 0) {
+      toast.info('No cycle records to backup');
+      return;
+    }
+    const exportData = cycles.map(c => {
+      const nextDate = getNextCycleDate(c.last_cycle_date, c.cycle_status);
+      return {
+        'Cow Tag': c.tag_number || c.cow_id,
+        'Cow Name': c.name || '—',
+        'Last Cycle Date': formatDate(c.last_cycle_date),
+        'Cycle Status / Action': c.cycle_status ? String(c.cycle_status).replace(/_/g, ' ') : '—',
+        'Next Expected Date': isPregnant(c.cycle_status) ? 'Pregnant' : formatDate(nextDate),
+        'Notes': c.notes || '—',
+        'Recorded On': formatDateTime(c.created_at || c.last_cycle_date)
+      };
+    });
+    downloadCSV(exportData, 'farm_cycle_records_backup');
+    toast.success(`Exported ${exportData.length} cycle records!`);
+  };
+
   const handleSave = async () => {
     if (!form.cow_id || !form.last_cycle_date) {
       toast.error('Please select a cow and date');
@@ -205,21 +226,30 @@ export default function CycleTracker() {
             </button>
           ))}
         </div>
-        <button
-          onClick={() => {
-            setForm({
-              cow_id: '',
-              last_cycle_date: new Date().toISOString().split('T')[0],
-              cycle_status: 'pending',
-              notes: '',
-              pregnancy_date: ''
-            });
-            setModalOpen(true);
-          }}
-          className="btn-primary text-sm flex items-center gap-1.5"
-        >
-          <Plus size={16} /> Record Cycle
-        </button>
+        <div className="flex items-center gap-2">
+          <button
+            onClick={exportAllCyclesCSV}
+            className="btn-secondary text-sm flex items-center gap-1.5"
+            title="Download CSV backup of all cycle records"
+          >
+            <Download size={16} /> Backup Cycles (CSV)
+          </button>
+          <button
+            onClick={() => {
+              setForm({
+                cow_id: '',
+                last_cycle_date: new Date().toISOString().split('T')[0],
+                cycle_status: 'pending',
+                notes: '',
+                pregnancy_date: ''
+              });
+              setModalOpen(true);
+            }}
+            className="btn-primary text-sm flex items-center gap-1.5"
+          >
+            <Plus size={16} /> Record Cycle
+          </button>
+        </div>
       </div>
 
       {filtered.length === 0 ? (
