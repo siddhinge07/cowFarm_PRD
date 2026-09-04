@@ -77,10 +77,26 @@ export default function CycleTracker() {
       latestCyclesMap[c.cow_id] = c;
     }
   });
+  const latestCycles = Object.values(latestCyclesMap);
   const counts = {
-    urgent: latestCycles.filter(c => !isPregnant(c.cycle_status) && getDaysUntil(getNextCycleDate(c.last_cycle_date, c.cycle_status)) <= 0).length,
-    upcoming: latestCycles.filter(c => !isPregnant(c.cycle_status) && getDaysUntil(getNextCycleDate(c.last_cycle_date, c.cycle_status)) > 0).length,
-    today: latestCycles.filter(c => !isPregnant(c.cycle_status) && getDaysUntil(getNextCycleDate(c.last_cycle_date, c.cycle_status)) === 0).length,
+    urgent: latestCycles.filter(c => {
+      if (isPregnant(c.cycle_status)) return false;
+      const next = getNextCycleDate(c.last_cycle_date, c.cycle_status);
+      const days = getDaysUntil(next);
+      return days !== null && days <= 0;
+    }).length,
+    upcoming: latestCycles.filter(c => {
+      if (isPregnant(c.cycle_status)) return false;
+      const next = getNextCycleDate(c.last_cycle_date, c.cycle_status);
+      const days = getDaysUntil(next);
+      return days !== null && days > 0;
+    }).length,
+    today: latestCycles.filter(c => {
+      if (isPregnant(c.cycle_status)) return false;
+      const next = getNextCycleDate(c.last_cycle_date, c.cycle_status);
+      const days = getDaysUntil(next);
+      return days !== null && days === 0;
+    }).length,
     all: cycles.length,
   };
 
