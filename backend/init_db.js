@@ -1,4 +1,4 @@
-﻿const mysql = require('mysql2/promise');
+const mysql = require('mysql2/promise');
 const fs = require('fs');
 const path = require('path');
 require('dotenv').config();
@@ -82,7 +82,7 @@ async function initDb() {
     await addColumnIfNotExists(connection, 'notifications', 'farm_id', 'VARCHAR(36) NULL');
 
     // Backfill any existing records to default farm
-    await connection.query(`UPDATE users SET farm_id = ?, is_verified = TRUE, role = 'admin' WHERE farm_id IS NULL`, [defaultFarmId]);
+    await connection.query(`UPDATE users SET farm_id = ?, is_verified = TRUE WHERE farm_id IS NULL`, [defaultFarmId]);
     await connection.query(`UPDATE cows SET farm_id = ? WHERE farm_id IS NULL`, [defaultFarmId]);
     await connection.query(`UPDATE estrus_cycles SET farm_id = ? WHERE farm_id IS NULL`, [defaultFarmId]);
     await connection.query(`UPDATE expenses SET farm_id = ? WHERE farm_id IS NULL`, [defaultFarmId]);

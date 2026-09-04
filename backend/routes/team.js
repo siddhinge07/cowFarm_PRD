@@ -16,8 +16,8 @@ router.get('/', verifyToken, async (req, res) => {
       `SELECT id, name, email, role, phone, is_active, created_at, last_login 
        FROM users 
        WHERE farm_id = ? 
-       ORDER BY CASE WHEN role = 'admin' THEN 0 ELSE 1 END, created_at ASC`,
-      [req.user.farm_id]
+       ORDER BY CASE WHEN id = ? THEN 0 ELSE 1 END, created_at ASC`,
+      [req.user.farm_id, req.user.id]
     );
 
     res.json({ data: team });
@@ -27,7 +27,7 @@ router.get('/', verifyToken, async (req, res) => {
   }
 });
 
-// Admin creates a worker account
+// Admin creates or updates a worker account
 router.post('/', verifyToken, async (req, res) => {
   try {
     if (req.user.role !== 'admin') {
@@ -56,16 +56,38 @@ router.post('/', verifyToken, async (req, res) => {
       return res.status(400).json({ error: { message: 'Password must be at least 6 characters.' } });
     }
 
-    // Check if user already exists
-    const [existing] = await pool.query('SELECT id FROM users WHERE email = ?', [workerEmail]);
-    if (existing.length > 0) {
-      return res.status(400).json({ error: { message: 'An account with this email already exists.' } });
-    }
-
     const salt = await bcrypt.genSalt(10);
     const password_hash = await bcrypt.hash(password, salt);
-    const workerId = crypto.randomUUID();
 
+    // Check if user already exists
+    const [existing] = await pool.query('SELECT id, farm_id, role FROM users WHERE email = ?', [workerEmail]);
+    
+    if (existing.length > 0) {
+      if (existing[0].id === req.user.id) {
+        return res.status(400).json({ error: { message: 'You cannot add your own admin email as a worker.' } });
+      }
+
+      // If user exists, enforce role = 'worker', update password, and attach to this farm
+      await pool.query(
+        `UPDATE users 
+         SET farm_id = ?, name = ?, password_hash = ?, role = 'worker', phone = ?, is_active = TRUE, is_verified = TRUE 
+         WHERE id = ?`,
+        [farmId, workerName, password_hash, phone || null, existing[0].id]
+      );
+
+      return res.json({
+        success: true,
+        message: 'Worker account updated with worker role successfully',
+        data: {
+          id: existing[0].id,
+          name: workerName,
+          email: workerEmail,
+          role: 'worker'
+        }
+      });
+    }
+
+    const workerId = crypto.randomUUID();
     await pool.query(
       `INSERT INTO users (id, farm_id, name, email, password_hash, role, phone, is_active, is_verified) 
        VALUES (?, ?, ?, ?, ?, 'worker', ?, TRUE, TRUE)`,
@@ -74,7 +96,7 @@ router.post('/', verifyToken, async (req, res) => {
 
     res.json({
       success: true,
-      message: 'Worker added successfully',
+      message: 'Worker added successfully with worker role',
       data: {
         id: workerId,
         name: workerName,
