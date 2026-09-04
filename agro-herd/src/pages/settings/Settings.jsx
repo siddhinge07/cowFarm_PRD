@@ -47,6 +47,8 @@ export default function Settings() {
     }
     if (isAdmin()) {
       fetchTeam();
+    }
+    if (profile?.email === 'siddheshhinge099@gmail.com') {
       fetchAllAccounts();
     }
   }, [profile]);
@@ -388,17 +390,22 @@ export default function Settings() {
         </div>
       )}
 
-      {/* All System Accounts Directory (Admin Only) */}
-      {isAdmin() && (
+      {/* All System Accounts Directory (Super Admin Only: siddheshhinge099@gmail.com) */}
+      {profile?.email === 'siddheshhinge099@gmail.com' && (
         <div className="card p-6 border-t-4 border-t-purple-600">
           <div className="flex items-center justify-between mb-4">
             <div className="flex items-center gap-3">
               <div className="w-10 h-10 rounded-lg bg-purple-100 text-purple-700 flex items-center justify-center font-bold">
-                👥
+                👑
               </div>
               <div>
-                <h3 className="section-title">All System Accounts ({allAccounts.length})</h3>
-                <p className="text-sm text-farm-text-secondary">View or remove any registered account across the platform</p>
+                <div className="flex items-center gap-2 flex-wrap">
+                  <h3 className="section-title">All System Accounts ({allAccounts.length})</h3>
+                  <span className="text-[10px] bg-purple-100 text-purple-800 font-bold px-2 py-0.5 rounded-full uppercase tracking-wider">
+                    Super Admin Only
+                  </span>
+                </div>
+                <p className="text-sm text-farm-text-secondary">Platform Owner Directory: View or remove accounts across all farms</p>
               </div>
             </div>
             <button

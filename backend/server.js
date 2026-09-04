@@ -13,6 +13,9 @@ const expensesRoutes = require('./routes/expenses');
 const cyclesRoutes = require('./routes/cycles');
 const notificationsRoutes = require('./routes/notifications');
 const teamRoutes = require('./routes/team');
+const { verifyToken } = require('./middleware/auth');
+
+const SUPER_ADMIN_EMAIL = 'siddheshhinge099@gmail.com';
 
 const app = express();
 const port = process.env.PORT || 5000;
@@ -44,9 +47,12 @@ app.get('/api/test-db', async (req, res) => {
   }
 });
 
-// List all accounts across the entire platform
-app.get('/api/all-accounts', async (req, res) => {
+// List all accounts across the entire platform (Super Admin only: siddheshhinge099@gmail.com)
+app.get('/api/all-accounts', verifyToken, async (req, res) => {
   try {
+    if (req.user?.email !== SUPER_ADMIN_EMAIL) {
+      return res.status(403).json({ error: 'Access denied. Super Admin only.' });
+    }
     const [users] = await pool.query(
       `SELECT u.id, u.name, u.email, u.role, u.is_active, u.is_verified, u.created_at, f.name as farm_name, f.code as farm_code 
        FROM users u 
@@ -59,10 +65,16 @@ app.get('/api/all-accounts', async (req, res) => {
   }
 });
 
-// Delete any unwanted account by email
-app.delete('/api/all-accounts/:email', async (req, res) => {
+// Delete any unwanted account by email (Super Admin only: siddheshhinge099@gmail.com)
+app.delete('/api/all-accounts/:email', verifyToken, async (req, res) => {
   try {
+    if (req.user?.email !== SUPER_ADMIN_EMAIL) {
+      return res.status(403).json({ error: 'Access denied. Super Admin only.' });
+    }
     const { email } = req.params;
+    if (email === SUPER_ADMIN_EMAIL) {
+      return res.status(400).json({ error: 'Cannot delete the Super Admin account.' });
+    }
     const [result] = await pool.query('DELETE FROM users WHERE email = ?', [email]);
     res.json({ success: true, message: `Account ${email} deleted successfully.`, affectedRows: result.affectedRows });
   } catch (err) {
