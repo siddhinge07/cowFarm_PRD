@@ -25,32 +25,40 @@ async function sendOtpEmail(email, otp, farmName = 'AgroHerd') {
     </div>
   `;
 
-  // 1. Prioritize Gmail / SMTP if configured (Allows sending to ANY recipient in the world)
+  let lastError = null;
+
+  // 1. Gmail SMTP (Sends to ANY email in the world)
   if (process.env.SMTP_USER && process.env.SMTP_PASS) {
     try {
+      const userEmail = process.env.SMTP_USER.trim();
+      const cleanPass = process.env.SMTP_PASS.replace(/[^a-zA-Z0-9]/g, '');
+
       const transporter = nodemailer.createTransport({
-        service: 'gmail',
+        host: 'smtp.gmail.com',
+        port: 465,
+        secure: true,
         auth: {
-          user: process.env.SMTP_USER,
-          pass: process.env.SMTP_PASS.replace(/\s+/g, '') // remove any accidental spaces
+          user: userEmail,
+          pass: cleanPass
         }
       });
 
       const info = await transporter.sendMail({
-        from: `"AgroHerd" <${process.env.SMTP_USER}>`,
+        from: `"AgroHerd" <${userEmail}>`,
         to: email,
         subject: `${otp} is your AgroHerd verification code`,
         html: htmlContent
       });
 
       console.log(`[Gmail SMTP Success] Email sent to ${email}. Message ID: ${info.messageId}`);
-      return true;
+      return { success: true, provider: 'gmail', messageId: info.messageId };
     } catch (err) {
       console.error('[Gmail SMTP Error]', err.message);
+      lastError = err;
     }
   }
 
-  // 2. Fallback to Resend API
+  // 2. Resend API Fallback
   const apiKey = process.env.RESEND_API_KEY;
   if (apiKey) {
     try {
@@ -72,15 +80,22 @@ async function sendOtpEmail(email, otp, farmName = 'AgroHerd') {
       const resData = await response.json();
       if (!response.ok) {
         console.error('[Resend Error]', resData);
+        lastError = new Error(resData.message || 'Resend error');
       } else {
         console.log('[Resend Success] Email sent ID:', resData.id);
+        return { success: true, provider: 'resend', id: resData.id };
       }
     } catch (err) {
       console.error('[Resend Failed]', err.message);
+      lastError = err;
     }
   }
 
-  return true;
+  if (lastError) {
+    throw lastError;
+  }
+
+  return { success: false, note: 'No email service credentials configured' };
 }
 
 module.exports = { sendOtpEmail };

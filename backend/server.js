@@ -70,6 +70,36 @@ app.delete('/api/all-accounts/:email', async (req, res) => {
   }
 });
 
+// Diagnostic route to test email sending live
+app.get('/api/test-email', async (req, res) => {
+  const to = req.query.to || 'siddheshhinge099@gmail.com';
+  const { sendOtpEmail } = require('./lib/email');
+  try {
+    const result = await sendOtpEmail(to, '999888', 'AgroHerd Diagnostic');
+    res.json({
+      success: true,
+      result,
+      target: to,
+      env: {
+        SMTP_USER: process.env.SMTP_USER ? `${process.env.SMTP_USER.slice(0, 4)}***` : 'NOT SET',
+        SMTP_PASS: process.env.SMTP_PASS ? `SET (${process.env.SMTP_PASS.length} chars)` : 'NOT SET',
+        RESEND_API_KEY: process.env.RESEND_API_KEY ? 'SET' : 'NOT SET',
+      }
+    });
+  } catch (err) {
+    res.status(500).json({
+      success: false,
+      error: err.message,
+      target: to,
+      env: {
+        SMTP_USER: process.env.SMTP_USER ? `${process.env.SMTP_USER.slice(0, 4)}***` : 'NOT SET',
+        SMTP_PASS: process.env.SMTP_PASS ? `SET (${process.env.SMTP_PASS.length} chars)` : 'NOT SET',
+        RESEND_API_KEY: process.env.RESEND_API_KEY ? 'SET' : 'NOT SET',
+      }
+    });
+  }
+});
+
 // Trigger schema initialization on demand
 app.get('/api/init-db', async (req, res) => {
   const result = await initDb();
