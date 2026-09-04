@@ -77,7 +77,12 @@ export default function CycleTracker() {
       latestCyclesMap[c.cow_id] = c;
     }
   });
-  const latestCycles = Object.values(latestCyclesMap);
+  const counts = {
+    all: cycles.length,
+    upcoming: latestCycles.filter(c => !isPregnant(c.cycle_status) && getDaysUntil(getNextCycleDate(c.last_cycle_date, c.cycle_status)) >= 0).length,
+    today: latestCycles.filter(c => !isPregnant(c.cycle_status) && getDaysUntil(getNextCycleDate(c.last_cycle_date, c.cycle_status)) === 0).length,
+    overdue: latestCycles.filter(c => !isPregnant(c.cycle_status) && getDaysUntil(getNextCycleDate(c.last_cycle_date, c.cycle_status)) < 0).length,
+  };
 
   const filtered = (filter === 'all' ? cycles : latestCycles)
     .filter(c => {
@@ -88,6 +93,7 @@ export default function CycleTracker() {
       if (days === null) return false;
       
       if (filter === 'today') return days === 0;
+      if (filter === 'overdue') return days < 0;
       if (filter === 'upcoming') return days >= 0;
       return true;
     })
@@ -160,16 +166,23 @@ export default function CycleTracker() {
         <ArrowLeft size={16} /> Back to Dashboard
       </button>
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
-        <div className="flex items-center gap-2">
-          {['all', 'upcoming', 'today'].map(f => (
+        <div className="flex flex-wrap items-center gap-2">
+          {['upcoming', 'today', 'overdue', 'all'].map(f => (
             <button
               key={f}
               onClick={() => setFilter(f)}
-              className={`px-3 py-1.5 text-sm rounded-lg transition-colors capitalize ${
-                filter === f ? 'bg-brand-primary text-white' : 'bg-white border border-farm-border text-farm-text-secondary hover:bg-gray-50'
+              className={`px-3 py-1.5 text-sm rounded-lg transition-colors flex items-center gap-2 font-medium ${
+                filter === f ? 'bg-brand-primary text-white shadow-sm' : 'bg-white border border-farm-border text-farm-text-secondary hover:bg-gray-50'
               }`}
             >
-              {f === 'upcoming' ? '⏰ Upcoming' : f === 'today' ? '🔴 Due Today' : 'All Records'}
+              <span>
+                {f === 'upcoming' ? '⏰ Upcoming' : f === 'today' ? '🔴 Due Today' : f === 'overdue' ? '⚠️ Overdue' : 'All Records'}
+              </span>
+              <span className={`text-xs px-2 py-0.5 rounded-full font-bold ${
+                filter === f ? 'bg-white/20 text-white' : 'bg-gray-100 text-gray-700'
+              }`}>
+                {counts[f]}
+              </span>
             </button>
           ))}
         </div>

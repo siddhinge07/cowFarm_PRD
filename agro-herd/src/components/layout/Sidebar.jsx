@@ -33,6 +33,30 @@ const navItems = [
 export default function Sidebar({ collapsed, onToggle, mobileOpen, onMobileClose }) {
   const location = useLocation();
   const { profile, signOut, canViewExpenses } = useAuth();
+  const [alertsCount, setAlertsCount] = useState(0);
+
+  useEffect(() => {
+    let mounted = true;
+    const fetchSidebarAlerts = async () => {
+      try {
+        const res = await api.get('/cycles');
+        const data = res?.data || [];
+        const latestCyclesMap = {};
+        data.forEach(c => {
+          const existing = latestCyclesMap[c.cow_id];
+          if (!existing || new Date(c.created_at || c.last_cycle_date) > new Date(existing.created_at || existing.last_cycle_date)) {
+            latestCyclesMap[c.cow_id] = c;
+          }
+        });
+        const active = Object.values(latestCyclesMap).filter(c => !['pregnant', 'confirmed_pregnancy'].includes(c.cycle_status));
+        if (mounted) setAlertsCount(active.length);
+      } catch (err) {
+        // silent
+      }
+    };
+    fetchSidebarAlerts();
+    return () => { mounted = false; };
+  }, [location.pathname]);
 
   const filteredNavItems = navItems.filter(item => {
     if ((item.path === '/expenses' || item.path === '/reports') && !canViewExpenses()) {
@@ -96,12 +120,21 @@ export default function Sidebar({ collapsed, onToggle, mobileOpen, onMobileClose
               to={path}
               onClick={onMobileClose}
               className={({ isActive }) =>
-                `sidebar-link ${isActive ? 'active' : ''} ${collapsed ? 'justify-center px-0' : ''}`
+                `sidebar-link relative ${isActive ? 'active' : ''} ${collapsed ? 'justify-center px-0' : ''}`
               }
               title={collapsed ? label : undefined}
             >
               <Icon size={20} />
-              {!collapsed && <span>{label}</span>}
+              {!collapsed && <span className="flex-1">{label}</span>}
+              {path === '/alerts' && alertsCount > 0 && (
+                collapsed ? (
+                  <span className="absolute top-2 right-2 w-2.5 h-2.5 rounded-full bg-red-500 ring-2 ring-farm-sidebar animate-pulse" />
+                ) : (
+                  <span className="bg-red-500 text-white font-bold text-xs px-2 py-0.5 rounded-full ml-auto shadow-sm">
+                    {alertsCount}
+                  </span>
+                )
+              )}
             </NavLink>
           ))}
         </nav>

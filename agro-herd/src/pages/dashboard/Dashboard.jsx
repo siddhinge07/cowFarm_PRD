@@ -20,24 +20,38 @@ export default function Dashboard() {
 
   const fetchAlerts = async () => {
     try {
-      const { data } = await api.get('/cycles/summary');
-      if (!data) { setAlerts([]); return; }
+      const res = await api.get('/cycles');
+      const data = res?.data || [];
+      if (!Array.isArray(data) || data.length === 0) {
+        setAlerts([]);
+        return;
+      }
 
-      const upcoming = data
-        .filter(c => !PREGNANT_STATUSES.includes(c.cycle_status)) // exclude pregnant cows
+      // Group by latest cycle per cow
+      const latestCyclesMap = {};
+      data.forEach(c => {
+        const existing = latestCyclesMap[c.cow_id];
+        if (!existing || new Date(c.created_at || c.last_cycle_date) > new Date(existing.created_at || existing.last_cycle_date)) {
+          latestCyclesMap[c.cow_id] = c;
+        }
+      });
+      const latestCycles = Object.values(latestCyclesMap);
+
+      const today = new Date();
+      today.setHours(0, 0, 0, 0);
+
+      const activeAlerts = latestCycles
+        .filter(c => !PREGNANT_STATUSES.includes(c.cycle_status))
         .map(c => {
           const nextDate = new Date(c.last_cycle_date);
           nextDate.setDate(nextDate.getDate() + 21);
-          const today = new Date();
-          today.setHours(0, 0, 0, 0);
           nextDate.setHours(0, 0, 0, 0);
           const daysUntil = Math.ceil((nextDate - today) / 86400000);
           return { ...c, nextDate, daysUntil };
         })
-        .filter(c => c.daysUntil >= 0) // Only future upcoming dates (including today)
-        .sort((a, b) => a.daysUntil - b.daysUntil); // nearest first
+        .sort((a, b) => a.daysUntil - b.daysUntil);
 
-      setAlerts(upcoming);
+      setAlerts(activeAlerts);
     } catch (err) {
       console.error('Failed to fetch alerts', err);
     } finally {
@@ -99,14 +113,19 @@ export default function Dashboard() {
           <span className="text-sm opacity-80">Log and analyze daily milk production</span>
         </button>
 
-        <button onClick={() => navigate('/alerts')} className="card p-10 bg-red-500 text-white flex flex-col items-center justify-center gap-4 hover:scale-[1.02] transition-transform cursor-pointer relative">
+        <button onClick={() => navigate('/alerts')} className="card p-10 bg-red-500 text-white flex flex-col items-center justify-center gap-4 hover:scale-[1.02] transition-transform cursor-pointer relative shadow-md">
           <AlertCircle size={64} />
           <span className="text-xl font-heading font-bold">Alerts</span>
-          <span className="text-sm opacity-80 font-medium">
-            {alertsLoading ? 'Loading alerts...' : `${alerts.length} upcoming cycle${alerts.length !== 1 ? 's' : ''}`}
+          <span className="text-sm opacity-90 font-medium">
+            {alertsLoading
+              ? 'Loading alerts...'
+              : alerts.length > 0
+                ? `${alerts.length} active cycle alert${alerts.length !== 1 ? 's' : ''}`
+                : 'All cycles up to date'}
           </span>
           {!alertsLoading && alerts.length > 0 && (
-            <span className="absolute top-4 right-4 bg-white text-red-500 font-bold px-2.5 py-1 rounded-full text-xs animate-pulse">
+            <span className="absolute top-4 right-4 bg-white text-red-600 font-extrabold px-3 py-1 rounded-full text-xs shadow-md flex items-center gap-1.5">
+              <span className="w-2 h-2 rounded-full bg-red-600 inline-block animate-ping" />
               {alerts.length}
             </span>
           )}
