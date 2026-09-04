@@ -40,7 +40,7 @@ export default function Dashboard() {
       const today = new Date();
       today.setHours(0, 0, 0, 0);
 
-      const activeAlerts = latestCycles
+      const urgentAlerts = latestCycles
         .filter(c => !PREGNANT_STATUSES.includes(c.cycle_status))
         .map(c => {
           const nextDate = new Date(c.last_cycle_date);
@@ -49,9 +49,10 @@ export default function Dashboard() {
           const daysUntil = Math.ceil((nextDate - today) / 86400000);
           return { ...c, nextDate, daysUntil };
         })
+        .filter(c => c.daysUntil <= 0) // Only due today (0) and overdue (< 0)
         .sort((a, b) => a.daysUntil - b.daysUntil);
 
-      setAlerts(activeAlerts);
+      setAlerts(urgentAlerts);
     } catch (err) {
       console.error('Failed to fetch alerts', err);
     } finally {
@@ -120,8 +121,8 @@ export default function Dashboard() {
             {alertsLoading
               ? 'Loading alerts...'
               : alerts.length > 0
-                ? `${alerts.length} active cycle alert${alerts.length !== 1 ? 's' : ''}`
-                : 'All cycles up to date'}
+                ? `${alerts.length} due today or overdue`
+                : '0 due today or overdue'}
           </span>
           {!alertsLoading && alerts.length > 0 && (
             <span className="absolute top-4 right-4 bg-white text-red-600 font-extrabold px-3 py-1 rounded-full text-xs shadow-md flex items-center gap-1.5">

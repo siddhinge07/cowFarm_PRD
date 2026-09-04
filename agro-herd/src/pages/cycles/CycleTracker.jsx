@@ -20,7 +20,7 @@ export default function CycleTracker() {
   const [modalOpen, setModalOpen] = useState(false);
   const [form, setForm] = useState({ cow_id: '', last_cycle_date: '', cycle_status: 'pending', notes: '', pregnancy_date: '' });
   const [saving, setSaving] = useState(false);
-  const [filter, setFilter] = useState('upcoming');
+  const [filter, setFilter] = useState('urgent');
   const [confirmOpen, setConfirmOpen] = useState(false);
   const [selectedId, setSelectedId] = useState(null);
 
@@ -78,10 +78,10 @@ export default function CycleTracker() {
     }
   });
   const counts = {
-    all: cycles.length,
-    upcoming: latestCycles.filter(c => !isPregnant(c.cycle_status) && getDaysUntil(getNextCycleDate(c.last_cycle_date, c.cycle_status)) >= 0).length,
+    urgent: latestCycles.filter(c => !isPregnant(c.cycle_status) && getDaysUntil(getNextCycleDate(c.last_cycle_date, c.cycle_status)) <= 0).length,
+    upcoming: latestCycles.filter(c => !isPregnant(c.cycle_status) && getDaysUntil(getNextCycleDate(c.last_cycle_date, c.cycle_status)) > 0).length,
     today: latestCycles.filter(c => !isPregnant(c.cycle_status) && getDaysUntil(getNextCycleDate(c.last_cycle_date, c.cycle_status)) === 0).length,
-    overdue: latestCycles.filter(c => !isPregnant(c.cycle_status) && getDaysUntil(getNextCycleDate(c.last_cycle_date, c.cycle_status)) < 0).length,
+    all: cycles.length,
   };
 
   const filtered = (filter === 'all' ? cycles : latestCycles)
@@ -92,9 +92,9 @@ export default function CycleTracker() {
       const days = getDaysUntil(next);
       if (days === null) return false;
       
+      if (filter === 'urgent') return days <= 0;
       if (filter === 'today') return days === 0;
-      if (filter === 'overdue') return days < 0;
-      if (filter === 'upcoming') return days >= 0;
+      if (filter === 'upcoming') return days > 0;
       return true;
     })
     .sort((a, b) => {
@@ -167,21 +167,24 @@ export default function CycleTracker() {
       </button>
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div className="flex flex-wrap items-center gap-2">
-          {['upcoming', 'today', 'overdue', 'all'].map(f => (
+          {[
+            { id: 'urgent', label: '🔴 Due & Overdue', count: counts.urgent },
+            { id: 'upcoming', label: '⏰ Upcoming', count: counts.upcoming },
+            { id: 'today', label: 'Due Today', count: counts.today },
+            { id: 'all', label: 'All Records', count: counts.all },
+          ].map(tab => (
             <button
-              key={f}
-              onClick={() => setFilter(f)}
+              key={tab.id}
+              onClick={() => setFilter(tab.id)}
               className={`px-3 py-1.5 text-sm rounded-lg transition-colors flex items-center gap-2 font-medium ${
-                filter === f ? 'bg-brand-primary text-white shadow-sm' : 'bg-white border border-farm-border text-farm-text-secondary hover:bg-gray-50'
+                filter === tab.id ? 'bg-brand-primary text-white shadow-sm' : 'bg-white border border-farm-border text-farm-text-secondary hover:bg-gray-50'
               }`}
             >
-              <span>
-                {f === 'upcoming' ? '⏰ Upcoming' : f === 'today' ? '🔴 Due Today' : f === 'overdue' ? '⚠️ Overdue' : 'All Records'}
-              </span>
+              <span>{tab.label}</span>
               <span className={`text-xs px-2 py-0.5 rounded-full font-bold ${
-                filter === f ? 'bg-white/20 text-white' : 'bg-gray-100 text-gray-700'
+                filter === tab.id ? 'bg-white/20 text-white' : 'bg-gray-100 text-gray-700'
               }`}>
-                {counts[f]}
+                {tab.count}
               </span>
             </button>
           ))}
@@ -254,12 +257,33 @@ export default function CycleTracker() {
                     </td>
                     <td className="px-4 py-3 text-sm text-farm-text-secondary hidden md:table-cell">{c.notes || '—'}</td>
                     <td className="px-4 py-3 text-center">
-                      <button
-                        onClick={() => { setSelectedId(c.id); setConfirmOpen(true); }}
-                        className="text-red-500 hover:text-red-700 p-1 rounded hover:bg-red-50 transition-colors"
-                      >
-                        <Trash size={16} />
-                      </button>
+                      <div className="flex items-center justify-center gap-2">
+                        {!pregnant && (
+                          <button
+                            onClick={() => {
+                              setForm({
+                                cow_id: c.cow_id,
+                                last_cycle_date: new Date().toISOString().split('T')[0],
+                                cycle_status: 'observed',
+                                notes: '',
+                                pregnancy_date: ''
+                              });
+                              setModalOpen(true);
+                            }}
+                            className="px-2.5 py-1 text-xs bg-emerald-50 text-emerald-700 hover:bg-emerald-100 border border-emerald-200 rounded-lg font-semibold transition-colors shadow-xs"
+                            title="Perform / Log action for this cow"
+                          >
+                            Take Action
+                          </button>
+                        )}
+                        <button
+                          onClick={() => { setSelectedId(c.id); setConfirmOpen(true); }}
+                          className="text-red-500 hover:text-red-700 p-1.5 rounded hover:bg-red-50 transition-colors"
+                          title="Delete record"
+                        >
+                          <Trash size={16} />
+                        </button>
+                      </div>
                     </td>
                   </tr>
                 );

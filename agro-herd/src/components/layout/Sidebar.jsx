@@ -48,8 +48,17 @@ export default function Sidebar({ collapsed, onToggle, mobileOpen, onMobileClose
             latestCyclesMap[c.cow_id] = c;
           }
         });
-        const active = Object.values(latestCyclesMap).filter(c => !['pregnant', 'confirmed_pregnancy'].includes(c.cycle_status));
-        if (mounted) setAlertsCount(active.length);
+        const today = new Date();
+        today.setHours(0, 0, 0, 0);
+        const urgent = Object.values(latestCyclesMap).filter(c => {
+          if (['pregnant', 'confirmed_pregnancy'].includes(c.cycle_status)) return false;
+          const nextDate = new Date(c.last_cycle_date);
+          nextDate.setDate(nextDate.getDate() + 21);
+          nextDate.setHours(0, 0, 0, 0);
+          const daysUntil = Math.ceil((nextDate - today) / 86400000);
+          return daysUntil <= 0;
+        });
+        if (mounted) setAlertsCount(urgent.length);
       } catch (err) {
         // silent
       }
