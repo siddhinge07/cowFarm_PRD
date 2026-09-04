@@ -1,6 +1,7 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { NavLink, useLocation } from 'react-router-dom';
 import { useAuth } from '../../contexts/AuthContext';
+import { api } from '../../lib/api';
 import {
   LayoutDashboard,
   Beef,
@@ -37,10 +38,12 @@ export default function Sidebar({ collapsed, onToggle, mobileOpen, onMobileClose
 
   useEffect(() => {
     let mounted = true;
+    if (!profile) return;
     const fetchSidebarAlerts = async () => {
       try {
         const res = await api.get('/cycles');
         const data = res?.data || [];
+        if (!Array.isArray(data)) return;
         const latestCyclesMap = {};
         data.forEach(c => {
           const existing = latestCyclesMap[c.cow_id];
@@ -65,7 +68,7 @@ export default function Sidebar({ collapsed, onToggle, mobileOpen, onMobileClose
     };
     fetchSidebarAlerts();
     return () => { mounted = false; };
-  }, [location.pathname]);
+  }, [location.pathname, profile]);
 
   const filteredNavItems = navItems.filter(item => {
     if ((item.path === '/expenses' || item.path === '/reports') && !canViewExpenses()) {

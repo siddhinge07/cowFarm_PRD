@@ -71,7 +71,7 @@ export default function CycleTracker() {
   const isPregnant = (status) => PREGNANT_STATUSES.includes(status);
 
   const latestCyclesMap = {};
-  cycles.forEach(c => {
+  (Array.isArray(cycles) ? cycles : []).forEach(c => {
     const existing = latestCyclesMap[c.cow_id];
     if (!existing || new Date(c.created_at || c.last_cycle_date) > new Date(existing.created_at || existing.last_cycle_date)) {
       latestCyclesMap[c.cow_id] = c;
@@ -255,7 +255,7 @@ export default function CycleTracker() {
                         pregnant ? 'pregnant' :
                         actioned ? 'success' :
                         (c.cycle_status === 'missed' || c.cycle_status === 'failed') ? 'danger' : 'warning'
-                      }>{c.cycle_status?.replaceAll('_', ' ')}</Badge>
+                      }>{c.cycle_status ? String(c.cycle_status).replace(/_/g, ' ') : '—'}</Badge>
                     </td>
                     <td className="px-4 py-3 text-sm">
                       {pregnant ? '—' : formatDate(nextDate)}
