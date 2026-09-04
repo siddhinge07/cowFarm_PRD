@@ -1,4 +1,4 @@
-﻿import { useState, useEffect } from 'react';
+import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../../contexts/AuthContext';
 import { api } from '../../lib/api';
@@ -117,7 +117,8 @@ export default function Settings() {
       setWorkerForm({ name: '', email: '', password: '', phone: '' });
       fetchTeam();
     } catch (err) {
-      toast.error(err.error?.message || err.message || 'Failed to add worker');
+      const msg = err.error?.message || (typeof err.error === 'string' ? err.error : '') || err.message || 'Failed to add worker';
+      toast.error(msg);
     } finally {
       setSavingWorker(false);
     }
@@ -131,7 +132,8 @@ export default function Settings() {
       setWorkerToDelete(null);
       fetchTeam();
     } catch (err) {
-      toast.error(err.error?.message || err.message || 'Failed to remove worker');
+      const msg = err.error?.message || (typeof err.error === 'string' ? err.error : '') || err.message || 'Failed to remove worker';
+      toast.error(msg);
     }
   };
 
